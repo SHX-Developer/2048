@@ -233,24 +233,21 @@ export function useGame2048() {
     return () => window.removeEventListener('keydown', onKey);
   }, [handleMove]);
 
-  // Touch swipe — prevents page scroll while playing
+  // Touch swipe — intercepts ALL touch movement to prevent Telegram's
+  // swipe-down-to-close gesture from firing during gameplay
   useEffect(() => {
     const MIN = 20;
-    let sx = 0, sy = 0, locked = false;
+    let sx = 0, sy = 0;
 
     const onStart = (e: TouchEvent) => {
       sx = e.touches[0].clientX;
       sy = e.touches[0].clientY;
-      locked = false;
     };
     const onMove = (e: TouchEvent) => {
-      // Only prevent scroll once we know the swipe axis
-      if (locked) e.preventDefault();
-      else {
-        const dx = Math.abs(e.touches[0].clientX - sx);
-        const dy = Math.abs(e.touches[0].clientY - sy);
-        if (Math.max(dx, dy) > 8) { locked = true; e.preventDefault(); }
-      }
+      // Prevent default unconditionally — this is what blocks Telegram's
+      // vertical swipe detector. We have passive:false on this listener
+      // so preventDefault() is always allowed.
+      e.preventDefault();
     };
     const onEnd = (e: TouchEvent) => {
       const dx = e.changedTouches[0].clientX - sx;
@@ -261,7 +258,7 @@ export function useGame2048() {
     };
 
     window.addEventListener('touchstart', onStart, { passive: true });
-    window.addEventListener('touchmove',  onMove,  { passive: false });
+    window.addEventListener('touchmove',  onMove,  { passive: false }); // must stay non-passive
     window.addEventListener('touchend',   onEnd,   { passive: true });
     return () => {
       window.removeEventListener('touchstart', onStart);

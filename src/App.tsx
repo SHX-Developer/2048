@@ -6,10 +6,19 @@ import { ScorePanel } from './components/ScorePanel';
 export default function App() {
   const { tiles, score, best, gameOver, restart } = useGame2048();
 
-  // Signal to Telegram that the Mini App is ready.
-  // This is required before HapticFeedback becomes available.
+  // Telegram Mini App initialisation
   useEffect(() => {
-    try { (window as any).Telegram?.WebApp?.ready(); } catch { /* not in Telegram */ }
+    const tg = (window as any).Telegram?.WebApp;
+    if (!tg) return;
+    try {
+      // 1. Signal the app is ready (unlocks HapticFeedback)
+      tg.ready();
+      // 2. Force the app to expand to full screen (prevents accidental collapse)
+      tg.expand();
+      // 3. Disable Telegram's own swipe-down-to-close gesture (Bot API 7.7+)
+      //    This is the most direct fix for the "game collapses on downward swipe" issue
+      tg.disableVerticalSwipes?.();
+    } catch { /* ignore older Telegram versions */ }
   }, []);
 
   return (
