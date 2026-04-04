@@ -8,7 +8,7 @@ import { playMerge } from '../utils/sound';
 // SLIDE_MS must match the transition duration in Tile.tsx.
 // After this delay, SETTLE fires: absorbed tiles removed, new tile spawned, queue consumed.
 // The merge-pop CSS animation plays independently on the inner div — no React timer needed.
-const SLIDE_MS = 500;
+const SLIDE_MS = 250;
 
 // Maximum number of moves to buffer while animating
 const QUEUE_MAX = 3;
@@ -205,19 +205,27 @@ export function useGame2048() {
   const pendingRef = useRef({ merges: 0, maxMerge: 0 });
   pendingRef.current = { merges: state.pendingMerges, maxMerge: state.pendingMaxMerge };
 
-  // Fire SETTLE after slide animation finishes
+  // Fire SETTLE after slide animation finishes.
+  // IMPORTANT: timer starts from requestAnimationFrame (first paint after React updates DOM),
+  // NOT from the dispatch moment. On slow phones React render takes ~80-150ms, so starting
+  // the timer from dispatch causes SETTLE to fire before CSS transitions visually complete.
   useEffect(() => {
     if (!state.busy) return;
-    const id = setTimeout(() => {
-      const { merges, maxMerge } = pendingRef.current;
-      if (merges > 0) {
-        // Sound and haptic fire right as the slide lands
-        playMerge(merges, maxMerge);
-        triggerHaptic();
-      }
-      dispatch({ type: 'SETTLE' });
-    }, SLIDE_MS + 16); // +16 = one extra frame for paint
-    return () => clearTimeout(id);
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const rafId = requestAnimationFrame(() => {
+      timeoutId = setTimeout(() => {
+        const { merges, maxMerge } = pendingRef.current;
+        if (merges > 0) {
+          playMerge(merges, maxMerge);
+          triggerHaptic();
+        }
+        dispatch({ type: 'SETTLE' });
+      }, SLIDE_MS);
+    });
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timeoutId);
+    };
   }, [state.busy, state.seq]);
 
   const handleMove = useCallback((dir: Direction) => {
