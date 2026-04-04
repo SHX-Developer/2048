@@ -7,8 +7,8 @@ import { playMerge } from '../utils/sound';
 
 // SLIDE_MS must match the transition duration in Tile.tsx.
 // After this delay, SETTLE fires: absorbed tiles removed, new tile spawned, queue consumed.
-// The merge-pop CSS animation (0.28s) plays independently on the inner div — no React timer needed.
-const SLIDE_MS = 150;
+// The merge-pop CSS animation plays independently on the inner div — no React timer needed.
+const SLIDE_MS = 220;
 
 // Maximum number of moves to buffer while animating
 const QUEUE_MAX = 3;
@@ -55,6 +55,8 @@ interface State {
   pendingMerges: number;
   /** Highest merged value in the current move — for sound pitch */
   pendingMaxMerge: number;
+  /** Increments every time a SETTLE with merges fires — triggers particle effects */
+  mergeSeq: number;
 }
 
 type Action =
@@ -69,9 +71,10 @@ function clearFlags(tiles: TileData[]): TileData[] {
 function startMove(
   tiles: TileData[],
   direction: Direction,
-  state: Omit<State, 'tiles' | 'busy' | 'queue' | 'seq' | 'pendingGain' | 'pendingMerges' | 'pendingMaxMerge'>,
+  state: Omit<State, 'tiles' | 'busy' | 'queue' | 'seq' | 'pendingGain' | 'pendingMerges' | 'pendingMaxMerge' | 'mergeSeq'>,
   queue: Direction[],
   seq: number,
+  mergeSeq: number,
 ): State | null {
   const fresh = clearFlags(tiles);
   const result = moveTiles(fresh, direction);
@@ -90,6 +93,7 @@ function startMove(
     busy: true,
     queue,
     seq: seq + 1,
+    mergeSeq,
     pendingGain: result.scoreGain,
     pendingMerges: mergeCount,
     pendingMaxMerge: maxMerge,
@@ -108,6 +112,7 @@ function init(): State {
     pendingGain: 0,
     pendingMerges: 0,
     pendingMaxMerge: 0,
+    mergeSeq: 0,
   };
 }
 
@@ -125,6 +130,7 @@ function reducer(state: State, action: Action): State {
           { score: state.score, best: state.best, gameOver: state.gameOver },
           state.queue,
           state.seq,
+          state.mergeSeq,
         );
         return next ?? state; // invalid move → ignore
       }
@@ -156,6 +162,7 @@ function reducer(state: State, action: Action): State {
           { score: newScore, best: newBest, gameOver: false },
           remainingQueue,
           state.seq,
+          state.mergeSeq,
         );
         if (nextState) return nextState; // valid queued move found — stay busy
         // else: invalid direction in queue → drop and try next
@@ -164,6 +171,7 @@ function reducer(state: State, action: Action): State {
       // No valid queued move — go idle
       // Keep isMerged: true so CSS pop animation plays on its own (no timer needed)
       const idleTiles = withNew.map(t => ({ ...t, isAbsorbed: false }));
+      const newMergeSeq = state.pendingMerges > 0 ? state.mergeSeq + 1 : state.mergeSeq;
       return {
         ...state,
         tiles: idleTiles,
@@ -173,6 +181,7 @@ function reducer(state: State, action: Action): State {
         busy: false,
         queue: [],
         seq: state.seq + 1,
+        mergeSeq: newMergeSeq,
         pendingGain: 0,
         pendingMerges: 0,
         pendingMaxMerge: 0,
@@ -272,6 +281,7 @@ export function useGame2048() {
     score:    state.score,
     best:     state.best,
     gameOver: state.gameOver,
+    mergeSeq: state.mergeSeq,
     restart,
   };
 }

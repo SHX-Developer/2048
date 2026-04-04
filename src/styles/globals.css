@@ -16,28 +16,24 @@
 
 /* ── Tile animations ─────────────────────────────────────────── */
 
-/*
- * New tile spawn — scale up from slightly small.
- * Plays on the inner div, independent of the outer wrapper's transform transition.
- */
 @keyframes tileNew {
-  0%   { transform: scale(0.6); opacity: 0; }
-  70%  { transform: scale(1.05); opacity: 1; }
+  0%   { transform: scale(0.5); opacity: 0; }
+  65%  { transform: scale(1.08); opacity: 1; }
+  85%  { transform: scale(0.97); }
   100% { transform: scale(1);   opacity: 1; }
 }
 
 /*
- * Merge pop — fires after slide completes (triggered by isMerged flag).
- * Spring feel: punch out → overshoot back → settle.
- * brightness() adds a subtle glow at peak — makes it feel satisfying.
- * Duration: 0.28s. No React timer needed — CSS plays independently.
+ * Merge pop — fires after slide completes.
+ * Epic spring: punch out with bright glow → sharp rebound → settle.
  */
 @keyframes tileMerge {
-  0%   { transform: scale(1);    filter: brightness(1);   }
-  20%  { transform: scale(1.18); filter: brightness(1.25);}
-  50%  { transform: scale(0.96); filter: brightness(1.08);}
-  75%  { transform: scale(1.05); filter: brightness(1);   }
-  100% { transform: scale(1);    filter: brightness(1);   }
+  0%   { transform: scale(1);    filter: brightness(1)    drop-shadow(0 0 0px currentColor); }
+  18%  { transform: scale(1.28); filter: brightness(1.45) drop-shadow(0 0 14px currentColor); }
+  42%  { transform: scale(0.93); filter: brightness(1.15) drop-shadow(0 0 6px currentColor);  }
+  65%  { transform: scale(1.08); filter: brightness(1.05) drop-shadow(0 0 3px currentColor);  }
+  82%  { transform: scale(0.98); filter: brightness(1);   }
+  100% { transform: scale(1);    filter: brightness(1)    drop-shadow(0 0 0px currentColor);  }
 }
 
 @keyframes fadeIn {
@@ -50,9 +46,9 @@
 }
 
 .tile-new {
-  animation: tileNew 0.25s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  animation: tileNew 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .tile-merge {
-  animation: tileMerge 0.28s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  animation: tileMerge 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }

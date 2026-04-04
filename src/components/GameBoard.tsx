@@ -1,6 +1,7 @@
 import type { TileData } from '../utils/gameLogic';
 import { Tile } from './Tile';
 import { GameOverModal } from './GameOverModal';
+import { ParticleCanvas } from './ParticleCanvas';
 import { GRID_SIZE, BOARD_BG, CELL_BG, CELL_SIZE, cellOffset } from '../utils/constants';
 
 interface GameBoardProps {
@@ -8,6 +9,7 @@ interface GameBoardProps {
   score: number;
   gameOver: boolean;
   onRestart: () => void;
+  mergeSeq: number;
 }
 
 // Pre-build the 16 background cell positions once
@@ -15,7 +17,9 @@ const BG_CELLS = Array.from({ length: GRID_SIZE }, (_, r) =>
   Array.from({ length: GRID_SIZE }, (_, c) => ({ r, c, key: `${r}-${c}` }))
 ).flat();
 
-export function GameBoard({ tiles, score, gameOver, onRestart }: GameBoardProps) {
+export function GameBoard({ tiles, score, gameOver, onRestart, mergeSeq }: GameBoardProps) {
+  const mergedTiles = tiles.filter(t => t.isMerged);
+
   return (
     // Outer wrapper keeps the board square
     <div style={{ position: 'relative', width: '100%', aspectRatio: '1' }}>
@@ -49,6 +53,9 @@ export function GameBoard({ tiles, score, gameOver, onRestart }: GameBoardProps)
         {tiles.map(tile => (
           <Tile key={tile.id} tile={tile} />
         ))}
+
+        {/* ── Particle effects ── */}
+        <ParticleCanvas mergedTiles={mergedTiles} mergeSeq={mergeSeq} />
       </div>
 
       {/* ── Game-over overlay ── */}

@@ -17,9 +17,9 @@ export function Tile({ tile }: TileProps) {
     height: `${CELL_SIZE}%`,
     // GPU-composited transform — smooth on any device, zero layout thrash
     transform: `translate(${tile.col * STEP_RATIO}%, ${tile.row * STEP_RATIO}%)`,
-    // 150ms must match SLIDE_MS in useGame2048.ts
-    // ease-out-quart: quick start, very soft landing — feels snappy but not jarring
-    transition: tile.isNew ? 'none' : 'transform 150ms cubic-bezier(0.25, 1, 0.5, 1)',
+    // 220ms must match SLIDE_MS in useGame2048.ts
+    // ease-out-expo: smooth glide with a buttery soft landing
+    transition: tile.isNew ? 'none' : 'transform 220ms cubic-bezier(0.16, 1, 0.3, 1)',
     zIndex: tile.isAbsorbed ? 5 : tile.isMerged ? 20 : 10,
     willChange: 'transform',
   };
