@@ -8,7 +8,7 @@ import { playMerge } from '../utils/sound';
 // SLIDE_MS must match the transition duration in Tile.tsx.
 // After this delay, SETTLE fires: absorbed tiles removed, new tile spawned, queue consumed.
 // The merge-pop CSS animation plays independently on the inner div — no React timer needed.
-const SLIDE_MS = 380;
+const SLIDE_MS = 500;
 
 // Maximum number of moves to buffer while animating
 const QUEUE_MAX = 3;

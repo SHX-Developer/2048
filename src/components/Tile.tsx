@@ -34,7 +34,9 @@ export const Tile = memo(function Tile({ tile }: TileProps) {
     // Only `transform` changes — GPU-composited, zero layout recalc.
     // 280ms matches SLIDE_MS. ease-out-sine: gentle start, soft landing — no jarring snap.
     transform:  `translate(${tile.col * STEP_RATIO}%, ${tile.row * STEP_RATIO}%)`,
-    transition: tile.isNew ? 'none' : 'transform 380ms cubic-bezier(0.22, 1, 0.36, 1)',
+    // ease-in-out-sine: slow start → accelerates mid-way → soft landing.
+    // Tiles clearly begin moving (unlike ease-out which rushes instantly to target).
+    transition: tile.isNew ? 'none' : 'transform 500ms cubic-bezier(0.37, 0, 0.63, 1)',
     zIndex:     tile.isAbsorbed ? 5 : tile.isMerged ? 20 : 10,
     willChange: 'transform', // keep pre-promoted — 16 small layers is fine on modern phones
   };
