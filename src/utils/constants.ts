@@ -11,6 +11,15 @@ export function cellOffset(n: number): number {
   return BOARD_PAD + n * (CELL_SIZE + CELL_GAP);
 }
 
+/**
+ * Step ratio for transform-based tile positioning.
+ * All tiles share left=BOARD_PAD%, top=BOARD_PAD% as base.
+ * Then translate(col*STEP_RATIO%, row*STEP_RATIO%) places them correctly.
+ * % in translate() is relative to the element itself, so:
+ *   STEP_RATIO = (CELL_SIZE + CELL_GAP) / CELL_SIZE * 100
+ */
+export const STEP_RATIO = (CELL_SIZE + CELL_GAP) / CELL_SIZE * 100; // ≈ 108.27
+
 // ─── Palette ────────────────────────────────────────────────────────────────
 
 export const PAGE_BG  = '#faf8ef';

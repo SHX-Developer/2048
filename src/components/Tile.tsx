@@ -1,5 +1,5 @@
 import type { TileData } from '../utils/gameLogic';
-import { TILE_COLORS, TILE_DEFAULT, CELL_SIZE, cellOffset, tileFontSize } from '../utils/constants';
+import { TILE_COLORS, TILE_DEFAULT, CELL_SIZE, BOARD_PAD, STEP_RATIO, tileFontSize } from '../utils/constants';
 
 interface TileProps {
   tile: TileData;
@@ -10,21 +10,23 @@ export function Tile({ tile }: TileProps) {
 
   const posStyle: React.CSSProperties = {
     position: 'absolute',
-    left:   `${cellOffset(tile.col)}%`,
-    top:    `${cellOffset(tile.row)}%`,
+    // Base anchor — never changes, so no layout recalc per frame
+    left: `${BOARD_PAD}%`,
+    top:  `${BOARD_PAD}%`,
     width:  `${CELL_SIZE}%`,
     height: `${CELL_SIZE}%`,
-    // Smooth movement — duration matches SLIDE_MS in the hook
-    // cubic-bezier: ease-out-quad, feels natural and not abrupt
-    transition: tile.isNew ? 'none' : 'left 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94), top 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-    // Absorbed tiles sit behind the winner
+    // GPU-composited transform — smooth on any device
+    transform: `translate(${tile.col * STEP_RATIO}%, ${tile.row * STEP_RATIO}%)`,
+    // "Emphasized decelerate" curve: tiles start with momentum, stop softly
+    transition: tile.isNew ? 'none' : 'transform 250ms cubic-bezier(0.2, 0, 0, 1)',
     zIndex: tile.isAbsorbed ? 5 : tile.isMerged ? 20 : 10,
+    willChange: 'transform',
   };
 
   const innerClass = [
     'tile-inner',
-    tile.isNew      ? 'tile-new'    : '',
-    tile.isMerged   ? 'tile-merge'  : '',
+    tile.isNew    ? 'tile-new'   : '',
+    tile.isMerged ? 'tile-merge' : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -43,7 +45,7 @@ export function Tile({ tile }: TileProps) {
           fontWeight: 700,
           fontSize: tileFontSize(tile.value),
           lineHeight: 1,
-          boxShadow: '0 2px 4px rgba(0,0,0,0.12)',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
           userSelect: 'none',
         }}
       >

@@ -4,8 +4,26 @@ import { createInitialTiles, addRandomTile, moveTiles, hasMovesAvailable } from 
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const SLIDE_MS = 200;   // CSS transition duration for tile movement
-const POP_MS   = 220;   // merge-pop animation duration
+const SLIDE_MS = 250;   // must match transition duration in Tile.tsx
+const POP_MS   = 380;   // must be > tileMerge animation duration in globals.css
+
+// ─── Haptic ──────────────────────────────────────────────────────────────────
+
+function triggerHaptic() {
+  try {
+    // Telegram Mini App — primary target
+    // HapticFeedback is only available after WebApp.ready() is called in App.tsx
+    const tg = (window as any).Telegram?.WebApp;
+    if (tg?.HapticFeedback) {
+      tg.HapticFeedback.impactOccurred('medium');
+      return;
+    }
+    // Fallback: Web Vibration API (Android WebView, Chrome)
+    navigator.vibrate?.(18);
+  } catch { /* ignore — not available */ }
+}
+
+// ─── LocalStorage ─────────────────────────────────────────────────────────────
 
 const BEST_KEY = '2048_best';
 const loadBest = (): number => {
@@ -121,12 +139,9 @@ export function useGame2048() {
   useEffect(() => {
     if (state.phase === 'sliding') {
       const id = setTimeout(() => {
-        // Haptic feedback for merges via Telegram Web App API
+        // Haptic feedback for merges via Telegram Mini App API
         if (state.pendingGain > 0) {
-          try {
-            const tg = (window as any).Telegram?.WebApp?.HapticFeedback;
-            if (tg) tg.impactOccurred('light');
-          } catch { /* not in Telegram — ignore */ }
+          triggerHaptic();
         }
         dispatch({ type: 'SETTLE' });
       }, SLIDE_MS + 10);
