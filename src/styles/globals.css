@@ -25,15 +25,17 @@
 
 /*
  * Merge pop — fires after slide completes.
- * Epic spring: punch out with bright glow → sharp rebound → settle.
+ * Only animates `transform` and `color` — both are compositable / cheap on mobile.
+ * NO filter/drop-shadow: those force full repaint + compositing on every frame (kills fps).
+ * `color: #fff` at peak overrides the inline color (CSS animations beat inline styles in cascade).
  */
 @keyframes tileMerge {
-  0%   { transform: scale(1);    filter: brightness(1)    drop-shadow(0 0 0px currentColor); }
-  18%  { transform: scale(1.28); filter: brightness(1.45) drop-shadow(0 0 14px currentColor); }
-  42%  { transform: scale(0.93); filter: brightness(1.15) drop-shadow(0 0 6px currentColor);  }
-  65%  { transform: scale(1.08); filter: brightness(1.05) drop-shadow(0 0 3px currentColor);  }
-  82%  { transform: scale(0.98); filter: brightness(1);   }
-  100% { transform: scale(1);    filter: brightness(1)    drop-shadow(0 0 0px currentColor);  }
+  0%   { transform: scale(1); }
+  18%  { transform: scale(1.26); color: #ffffff; }
+  44%  { transform: scale(0.94); color: #ffffff; }
+  68%  { transform: scale(1.07); }
+  84%  { transform: scale(0.99); }
+  100% { transform: scale(1); }
 }
 
 @keyframes fadeIn {
@@ -41,14 +43,20 @@
   to   { opacity: 1; }
 }
 
+/*
+ * Promote animating tiles to their own compositor layer.
+ * Only applied during animation — prevents unnecessary layer creation on idle tiles.
+ */
 .tile-inner {
   transform: scale(1);
 }
 
 .tile-new {
   animation: tileNew 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
 }
 
 .tile-merge {
   animation: tileMerge 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform;
 }

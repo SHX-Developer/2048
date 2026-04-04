@@ -19,10 +19,10 @@ function triggerHaptic() {
   try {
     const tg = (window as any).Telegram?.WebApp;
     if (tg?.HapticFeedback) {
-      tg.HapticFeedback.impactOccurred('medium');
+      tg.HapticFeedback.impactOccurred('heavy');
       return;
     }
-    navigator.vibrate?.(18);
+    navigator.vibrate?.(40);
   } catch { /* ignore */ }
 }
 
