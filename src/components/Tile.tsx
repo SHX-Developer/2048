@@ -4,25 +4,24 @@ import { TILE_COLORS, TILE_DEFAULT, CELL_SIZE, BOARD_PAD, STEP_RATIO, tileFontSi
 
 interface TileProps {
   tile: TileData;
-  // Passed from parent when a move is in flight — controls GPU layer promotion
-  busy: boolean;
 }
 
-// Only re-render when something visual actually changed.
-// On a typical move, 12–15 out of 16 tiles are untouched → skip their render entirely.
+// Skip re-render when nothing visual changed.
+// `busy` intentionally NOT compared — passing it caused all 16 tiles to
+// re-render twice per move (on busy:false→true and busy:true→false).
 function tilesEqual(prev: TileProps, next: TileProps) {
+  const a = prev.tile, b = next.tile;
   return (
-    prev.busy           === next.busy           &&
-    prev.tile.row       === next.tile.row       &&
-    prev.tile.col       === next.tile.col       &&
-    prev.tile.value     === next.tile.value     &&
-    prev.tile.isNew     === next.tile.isNew     &&
-    prev.tile.isMerged  === next.tile.isMerged  &&
-    prev.tile.isAbsorbed=== next.tile.isAbsorbed
+    a.row        === b.row        &&
+    a.col        === b.col        &&
+    a.value      === b.value      &&
+    a.isNew      === b.isNew      &&
+    a.isMerged   === b.isMerged   &&
+    a.isAbsorbed === b.isAbsorbed
   );
 }
 
-export const Tile = memo(function Tile({ tile, busy }: TileProps) {
+export const Tile = memo(function Tile({ tile }: TileProps) {
   const { bg, fg } = TILE_COLORS[tile.value] ?? TILE_DEFAULT;
   const fontSize = tileFontSize(tile.value);
 
@@ -32,12 +31,12 @@ export const Tile = memo(function Tile({ tile, busy }: TileProps) {
     top:  `${BOARD_PAD}%`,
     width:  `${CELL_SIZE}%`,
     height: `${CELL_SIZE}%`,
-    // GPU-composited: only `transform` changes, no layout recalc
-    transform: `translate(${tile.col * STEP_RATIO}%, ${tile.row * STEP_RATIO}%)`,
-    transition: tile.isNew ? 'none' : 'transform 220ms cubic-bezier(0.16, 1, 0.3, 1)',
-    zIndex: tile.isAbsorbed ? 5 : tile.isMerged ? 20 : 10,
-    // Promote to GPU layer only while a move is in flight — avoids 16 permanent layers
-    willChange: busy ? 'transform' : 'auto',
+    // Only `transform` changes — GPU-composited, zero layout recalc.
+    // 280ms matches SLIDE_MS. ease-out-sine: gentle start, soft landing — no jarring snap.
+    transform:  `translate(${tile.col * STEP_RATIO}%, ${tile.row * STEP_RATIO}%)`,
+    transition: tile.isNew ? 'none' : 'transform 280ms cubic-bezier(0.22, 1, 0.36, 1)',
+    zIndex:     tile.isAbsorbed ? 5 : tile.isMerged ? 20 : 10,
+    willChange: 'transform', // keep pre-promoted — 16 small layers is fine on modern phones
   };
 
   const innerClass = [
@@ -68,14 +67,10 @@ export const Tile = memo(function Tile({ tile, busy }: TileProps) {
         }}
       >
         {tile.value}
-        {/* Bright overlay — white text that fades in/scales at pop peak.
-            Uses ONLY opacity + transform → fully GPU-composited, zero repaint. */}
+        {/* White overlay — fades in+scales at merge peak using only opacity+transform.
+            Fully GPU-composited: zero repaint cost. */}
         {tile.isMerged && (
-          <span
-            className="tile-bright"
-            aria-hidden="true"
-            style={{ fontSize }}
-          >
+          <span className="tile-bright" aria-hidden="true" style={{ fontSize }}>
             {tile.value}
           </span>
         )}

@@ -1,3 +1,4 @@
+import { memo, useMemo } from 'react';
 import type { TileData } from '../utils/gameLogic';
 import { Tile } from './Tile';
 import { GameOverModal } from './GameOverModal';
@@ -10,33 +11,16 @@ interface GameBoardProps {
   gameOver: boolean;
   onRestart: () => void;
   mergeSeq: number;
-  busy: boolean;
 }
 
-// Pre-build the 16 background cell positions once — never re-created
-const BG_CELLS = Array.from({ length: GRID_SIZE }, (_, r) =>
-  Array.from({ length: GRID_SIZE }, (_, c) => ({ r, c, key: `${r}-${c}` }))
-).flat();
-
-export function GameBoard({ tiles, score, gameOver, onRestart, mergeSeq, busy }: GameBoardProps) {
-  const mergedTiles = tiles.filter(t => t.isMerged);
-
+// Static background — memoized so it never re-renders
+const BoardBackground = memo(function BoardBackground() {
   return (
-    <div style={{ position: 'relative', width: '100%', aspectRatio: '1' }}>
-      {/* Board surface */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundColor: BOARD_BG,
-          borderRadius: '6px',
-          overflow: 'hidden',
-        }}
-      >
-        {/* ── Background cells ── */}
-        {BG_CELLS.map(({ r, c, key }) => (
+    <>
+      {Array.from({ length: GRID_SIZE }, (_, r) =>
+        Array.from({ length: GRID_SIZE }, (_, c) => (
           <div
-            key={key}
+            key={`${r}-${c}`}
             style={{
               position: 'absolute',
               left:   `${cellOffset(c)}%`,
@@ -47,18 +31,36 @@ export function GameBoard({ tiles, score, gameOver, onRestart, mergeSeq, busy }:
               borderRadius: '3px',
             }}
           />
-        ))}
+        ))
+      )}
+    </>
+  );
+});
 
-        {/* ── Tile layer ── */}
+export function GameBoard({ tiles, score, gameOver, onRestart, mergeSeq }: GameBoardProps) {
+  // Only recomputed when `tiles` reference changes — avoids new array on every render
+  const mergedTiles = useMemo(() => tiles.filter(t => t.isMerged), [tiles]);
+
+  return (
+    <div style={{ position: 'relative', width: '100%', aspectRatio: '1' }}>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundColor: BOARD_BG,
+          borderRadius: '6px',
+          overflow: 'hidden',
+        }}
+      >
+        <BoardBackground />
+
         {tiles.map(tile => (
-          <Tile key={tile.id} tile={tile} busy={busy} />
+          <Tile key={tile.id} tile={tile} />
         ))}
 
-        {/* ── Particle effects ── */}
         <ParticleCanvas mergedTiles={mergedTiles} mergeSeq={mergeSeq} />
       </div>
 
-      {/* ── Game-over overlay ── */}
       {gameOver && (
         <GameOverModal score={score} onRestart={onRestart} />
       )}
