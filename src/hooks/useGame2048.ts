@@ -1,26 +1,29 @@
-import { useCallback, useEffect, useReducer } from 'react';
+import { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { TileData, Direction } from '../utils/gameLogic';
 import { createInitialTiles, addRandomTile, moveTiles, hasMovesAvailable } from '../utils/gameLogic';
+import { playMerge } from '../utils/sound';
 
-// ─── Constants ───────────────────────────────────────────────────────────────
+// ─── Timing ──────────────────────────────────────────────────────────────────
 
-const SLIDE_MS = 250;   // must match transition duration in Tile.tsx
-const POP_MS   = 380;   // must be > tileMerge animation duration in globals.css
+// SLIDE_MS must match the transition duration in Tile.tsx.
+// After this delay, SETTLE fires: absorbed tiles removed, new tile spawned, queue consumed.
+// The merge-pop CSS animation (0.28s) plays independently on the inner div — no React timer needed.
+const SLIDE_MS = 150;
+
+// Maximum number of moves to buffer while animating
+const QUEUE_MAX = 3;
 
 // ─── Haptic ──────────────────────────────────────────────────────────────────
 
 function triggerHaptic() {
   try {
-    // Telegram Mini App — primary target
-    // HapticFeedback is only available after WebApp.ready() is called in App.tsx
     const tg = (window as any).Telegram?.WebApp;
     if (tg?.HapticFeedback) {
       tg.HapticFeedback.impactOccurred('medium');
       return;
     }
-    // Fallback: Web Vibration API (Android WebView, Chrome)
     navigator.vibrate?.(18);
-  } catch { /* ignore — not available */ }
+  } catch { /* ignore */ }
 }
 
 // ─── LocalStorage ─────────────────────────────────────────────────────────────
@@ -34,33 +37,64 @@ const saveBest = (n: number) => {
   try { localStorage.setItem(BEST_KEY, String(n)); } catch { /* ignore */ }
 };
 
-// ─── State / Reducer ─────────────────────────────────────────────────────────
-
-/**
- * Three-phase move sequence:
- *  idle  →  MOVE  →  sliding  →  SETTLE  →  popping  →  CLEANUP  →  idle
- *
- *  sliding : tiles animate from old → new positions, absorbed tiles fly to merge target
- *  popping : absorbed tiles removed, merged tiles play pop animation, new tile spawns
- *  idle    : isMerged / isNew flags cleared on next MOVE (they're cleared before each move)
- */
-type Phase = 'idle' | 'sliding' | 'popping';
+// ─── State ────────────────────────────────────────────────────────────────────
 
 interface State {
   tiles: TileData[];
   score: number;
   best: number;
   gameOver: boolean;
-  phase: Phase;
-  seq: number;         // increments each phase change to re-trigger useEffect
+  /** Whether a slide animation is currently in flight. Blocks immediate processing. */
+  busy: boolean;
+  /** Buffered inputs received while busy */
+  queue: Direction[];
+  /** Increments each time a new slide starts — lets useEffect re-arm the timer */
+  seq: number;
   pendingGain: number;
+  /** Number of merges in the current move — for sound richness */
+  pendingMerges: number;
+  /** Highest merged value in the current move — for sound pitch */
+  pendingMaxMerge: number;
 }
 
 type Action =
   | { type: 'MOVE'; direction: Direction }
-  | { type: 'SETTLE' }   // slide finished → remove absorbed, spawn new, start pop
-  | { type: 'CLEANUP' }  // pop finished  → clear flags, back to idle
+  | { type: 'SETTLE' }
   | { type: 'RESTART' };
+
+function clearFlags(tiles: TileData[]): TileData[] {
+  return tiles.map(t => ({ ...t, isNew: false, isMerged: false }));
+}
+
+function startMove(
+  tiles: TileData[],
+  direction: Direction,
+  state: Omit<State, 'tiles' | 'busy' | 'queue' | 'seq' | 'pendingGain' | 'pendingMerges' | 'pendingMaxMerge'>,
+  queue: Direction[],
+  seq: number,
+): State | null {
+  const fresh = clearFlags(tiles);
+  const result = moveTiles(fresh, direction);
+  if (!result.moved) return null;
+
+  // Count merges and find max merged value for sound/haptic metadata
+  const mergedTiles = result.tiles.filter(t => t.isMerged);
+  const mergeCount  = mergedTiles.length;
+  const maxMerge    = mergeCount > 0
+    ? Math.max(...mergedTiles.map(t => t.value))
+    : 0;
+
+  return {
+    ...state,
+    tiles: result.tiles,
+    busy: true,
+    queue,
+    seq: seq + 1,
+    pendingGain: result.scoreGain,
+    pendingMerges: mergeCount,
+    pendingMaxMerge: maxMerge,
+  };
+}
 
 function init(): State {
   return {
@@ -68,57 +102,80 @@ function init(): State {
     score: 0,
     best: loadBest(),
     gameOver: false,
-    phase: 'idle',
+    busy: false,
+    queue: [],
     seq: 0,
     pendingGain: 0,
+    pendingMerges: 0,
+    pendingMaxMerge: 0,
   };
 }
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
+
     case 'MOVE': {
-      if (state.phase !== 'idle' || state.gameOver) return state;
-      // Clear stale animation flags before computing the new move
-      const freshTiles = state.tiles.map(t => ({ ...t, isNew: false, isMerged: false }));
-      const result = moveTiles(freshTiles, action.direction);
-      if (!result.moved) return state;
-      return {
-        ...state,
-        tiles: result.tiles,
-        phase: 'sliding',
-        seq: state.seq + 1,
-        pendingGain: result.scoreGain,
-      };
+      if (state.gameOver) return state;
+
+      if (!state.busy) {
+        // Free — execute immediately
+        const next = startMove(
+          state.tiles,
+          action.direction,
+          { score: state.score, best: state.best, gameOver: state.gameOver },
+          state.queue,
+          state.seq,
+        );
+        return next ?? state; // invalid move → ignore
+      }
+
+      // Busy — buffer if there's room (deduplicate consecutive identical directions)
+      if (state.queue.length >= QUEUE_MAX) return state;
+      const last = state.queue[state.queue.length - 1];
+      if (last === action.direction) return state; // skip duplicate
+      return { ...state, queue: [...state.queue, action.direction] };
     }
 
     case 'SETTLE': {
-      if (state.phase !== 'sliding') return state;
-      // Remove absorbed tiles, spawn new tile (it will animate in)
+      if (!state.busy) return state;
+
+      // Finalise current move: remove absorbed tiles, spawn new tile
       const withoutAbsorbed = state.tiles.filter(t => !t.isAbsorbed);
-      const withNew = addRandomTile(withoutAbsorbed);
-      const newScore = state.score + state.pendingGain;
-      const newBest  = Math.max(state.best, newScore);
+      const withNew         = addRandomTile(withoutAbsorbed);
+      const newScore        = state.score + state.pendingGain;
+      const newBest         = Math.max(state.best, newScore);
       if (newBest > state.best) saveBest(newBest);
+
+      // Try consuming the next valid move from the queue
+      const remainingQueue = [...state.queue];
+      while (remainingQueue.length > 0) {
+        const nextDir    = remainingQueue.shift()!;
+        const nextState  = startMove(
+          withNew,
+          nextDir,
+          { score: newScore, best: newBest, gameOver: false },
+          remainingQueue,
+          state.seq,
+        );
+        if (nextState) return nextState; // valid queued move found — stay busy
+        // else: invalid direction in queue → drop and try next
+      }
+
+      // No valid queued move — go idle
+      // Keep isMerged: true so CSS pop animation plays on its own (no timer needed)
+      const idleTiles = withNew.map(t => ({ ...t, isAbsorbed: false }));
       return {
         ...state,
-        tiles: withNew,
+        tiles: idleTiles,
         score: newScore,
         best: newBest,
-        phase: 'popping',
+        gameOver: !hasMovesAvailable(idleTiles),
+        busy: false,
+        queue: [],
         seq: state.seq + 1,
         pendingGain: 0,
-      };
-    }
-
-    case 'CLEANUP': {
-      if (state.phase !== 'popping') return state;
-      const cleaned = state.tiles.map(t => ({ ...t, isNew: false, isMerged: false }));
-      return {
-        ...state,
-        tiles: cleaned,
-        gameOver: !hasMovesAvailable(cleaned),
-        phase: 'idle',
-        seq: state.seq + 1,
+        pendingMerges: 0,
+        pendingMaxMerge: 0,
       };
     }
 
@@ -135,23 +192,24 @@ function reducer(state: State, action: Action): State {
 export function useGame2048() {
   const [state, dispatch] = useReducer(reducer, undefined, init);
 
-  // Drive the phase state machine with timers
+  // Keep a ref to pendingMerges/pendingMaxMerge for the timer callback
+  const pendingRef = useRef({ merges: 0, maxMerge: 0 });
+  pendingRef.current = { merges: state.pendingMerges, maxMerge: state.pendingMaxMerge };
+
+  // Fire SETTLE after slide animation finishes
   useEffect(() => {
-    if (state.phase === 'sliding') {
-      const id = setTimeout(() => {
-        // Haptic feedback for merges via Telegram Mini App API
-        if (state.pendingGain > 0) {
-          triggerHaptic();
-        }
-        dispatch({ type: 'SETTLE' });
-      }, SLIDE_MS + 10);
-      return () => clearTimeout(id);
-    }
-    if (state.phase === 'popping') {
-      const id = setTimeout(() => dispatch({ type: 'CLEANUP' }), POP_MS + 10);
-      return () => clearTimeout(id);
-    }
-  }, [state.phase, state.seq, state.pendingGain]);
+    if (!state.busy) return;
+    const id = setTimeout(() => {
+      const { merges, maxMerge } = pendingRef.current;
+      if (merges > 0) {
+        // Sound and haptic fire right as the slide lands
+        playMerge(merges, maxMerge);
+        triggerHaptic();
+      }
+      dispatch({ type: 'SETTLE' });
+    }, SLIDE_MS + 16); // +16 = one extra frame for paint
+    return () => clearTimeout(id);
+  }, [state.busy, state.seq]);
 
   const handleMove = useCallback((dir: Direction) => {
     dispatch({ type: 'MOVE', direction: dir });
@@ -175,16 +233,25 @@ export function useGame2048() {
     return () => window.removeEventListener('keydown', onKey);
   }, [handleMove]);
 
-  // Touch swipe — also prevents page scroll while playing
+  // Touch swipe — prevents page scroll while playing
   useEffect(() => {
-    const MIN = 25;
-    let sx = 0, sy = 0;
+    const MIN = 20;
+    let sx = 0, sy = 0, locked = false;
 
     const onStart = (e: TouchEvent) => {
       sx = e.touches[0].clientX;
       sy = e.touches[0].clientY;
+      locked = false;
     };
-    const onMove = (e: TouchEvent) => { e.preventDefault(); };
+    const onMove = (e: TouchEvent) => {
+      // Only prevent scroll once we know the swipe axis
+      if (locked) e.preventDefault();
+      else {
+        const dx = Math.abs(e.touches[0].clientX - sx);
+        const dy = Math.abs(e.touches[0].clientY - sy);
+        if (Math.max(dx, dy) > 8) { locked = true; e.preventDefault(); }
+      }
+    };
     const onEnd = (e: TouchEvent) => {
       const dx = e.changedTouches[0].clientX - sx;
       const dy = e.changedTouches[0].clientY - sy;
@@ -203,5 +270,11 @@ export function useGame2048() {
     };
   }, [handleMove]);
 
-  return { tiles: state.tiles, score: state.score, best: state.best, gameOver: state.gameOver, restart };
+  return {
+    tiles:    state.tiles,
+    score:    state.score,
+    best:     state.best,
+    gameOver: state.gameOver,
+    restart,
+  };
 }
