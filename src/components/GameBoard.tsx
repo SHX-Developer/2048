@@ -10,18 +10,18 @@ interface GameBoardProps {
   gameOver: boolean;
   onRestart: () => void;
   mergeSeq: number;
+  busy: boolean;
 }
 
-// Pre-build the 16 background cell positions once
+// Pre-build the 16 background cell positions once — never re-created
 const BG_CELLS = Array.from({ length: GRID_SIZE }, (_, r) =>
   Array.from({ length: GRID_SIZE }, (_, c) => ({ r, c, key: `${r}-${c}` }))
 ).flat();
 
-export function GameBoard({ tiles, score, gameOver, onRestart, mergeSeq }: GameBoardProps) {
+export function GameBoard({ tiles, score, gameOver, onRestart, mergeSeq, busy }: GameBoardProps) {
   const mergedTiles = tiles.filter(t => t.isMerged);
 
   return (
-    // Outer wrapper keeps the board square
     <div style={{ position: 'relative', width: '100%', aspectRatio: '1' }}>
       {/* Board surface */}
       <div
@@ -51,7 +51,7 @@ export function GameBoard({ tiles, score, gameOver, onRestart, mergeSeq }: GameB
 
         {/* ── Tile layer ── */}
         {tiles.map(tile => (
-          <Tile key={tile.id} tile={tile} />
+          <Tile key={tile.id} tile={tile} busy={busy} />
         ))}
 
         {/* ── Particle effects ── */}

@@ -281,6 +281,7 @@ export function useGame2048() {
     score:    state.score,
     best:     state.best,
     gameOver: state.gameOver,
+    busy:     state.busy,
     mergeSeq: state.mergeSeq,
     restart,
   };

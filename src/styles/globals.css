@@ -16,26 +16,38 @@
 
 /* ── Tile animations ─────────────────────────────────────────── */
 
+/* New tile — scale + fade. Only transform+opacity → fully compositable. */
 @keyframes tileNew {
-  0%   { transform: scale(0.5); opacity: 0; }
-  65%  { transform: scale(1.08); opacity: 1; }
-  85%  { transform: scale(0.97); }
-  100% { transform: scale(1);   opacity: 1; }
+  0%   { transform: scale(0.45); opacity: 0; }
+  60%  { transform: scale(1.1);  opacity: 1; }
+  82%  { transform: scale(0.96); }
+  100% { transform: scale(1);    opacity: 1; }
 }
 
 /*
- * Merge pop — fires after slide completes.
- * Only animates `transform` and `color` — both are compositable / cheap on mobile.
- * NO filter/drop-shadow: those force full repaint + compositing on every frame (kills fps).
- * `color: #fff` at peak overrides the inline color (CSS animations beat inline styles in cascade).
+ * Merge pop — ONLY transform. No filter, no color, no box-shadow.
+ * transform is the only property that's truly GPU-composited.
+ * All other animatable properties force at least a partial repaint on mobile.
  */
 @keyframes tileMerge {
   0%   { transform: scale(1); }
-  18%  { transform: scale(1.26); color: #ffffff; }
-  44%  { transform: scale(0.94); color: #ffffff; }
-  68%  { transform: scale(1.07); }
-  84%  { transform: scale(0.99); }
+  20%  { transform: scale(1.24); }
+  46%  { transform: scale(0.94); }
+  70%  { transform: scale(1.07); }
+  86%  { transform: scale(0.99); }
   100% { transform: scale(1); }
+}
+
+/*
+ * Bright overlay — white text + scale-up that appears on merge peak.
+ * Separate element → only opacity+transform → zero repaint cost.
+ * This is how you get "text gets bright and bigger" without any paint.
+ */
+@keyframes tileBright {
+  0%   { opacity: 0;   transform: scale(1); }
+  22%  { opacity: 1;   transform: scale(1.35); }
+  55%  { opacity: 0.5; transform: scale(1.12); }
+  100% { opacity: 0;   transform: scale(1); }
 }
 
 @keyframes fadeIn {
@@ -43,20 +55,31 @@
   to   { opacity: 1; }
 }
 
-/*
- * Promote animating tiles to their own compositor layer.
- * Only applied during animation — prevents unnecessary layer creation on idle tiles.
- */
 .tile-inner {
   transform: scale(1);
 }
 
 .tile-new {
-  animation: tileNew 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: tileNew 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   will-change: transform, opacity;
 }
 
 .tile-merge {
-  animation: tileMerge 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: tileMerge 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   will-change: transform;
+}
+
+/* Bright white number overlay — sits on top of the tile text during merge pop */
+.tile-bright {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+  animation: tileBright 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
 }

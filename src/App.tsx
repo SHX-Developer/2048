@@ -4,7 +4,7 @@ import { GameBoard } from './components/GameBoard';
 import { ScorePanel } from './components/ScorePanel';
 
 export default function App() {
-  const { tiles, score, best, gameOver, mergeSeq, restart } = useGame2048();
+  const { tiles, score, best, gameOver, busy, mergeSeq, restart } = useGame2048();
 
   // Telegram Mini App initialisation
   useEffect(() => {
@@ -35,7 +35,7 @@ export default function App() {
     >
       <div style={{ width: '100%', maxWidth: '480px' }}>
         <ScorePanel score={score} best={best} onRestart={restart} />
-        <GameBoard tiles={tiles} score={score} gameOver={gameOver} onRestart={restart} mergeSeq={mergeSeq} />
+        <GameBoard tiles={tiles} score={score} gameOver={gameOver} onRestart={restart} mergeSeq={mergeSeq} busy={busy} />
       </div>
     </div>
   );

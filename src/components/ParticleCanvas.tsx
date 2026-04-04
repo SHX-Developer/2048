@@ -8,22 +8,22 @@ interface Particle {
   x: number; y: number;
   vx: number; vy: number;
   size: number;
-  t: number;    // progress 0→1 (0=alive, 1=dead)
-  dt: number;   // per-frame increment (1/lifetime_frames)
-  r: number; g: number; b: number;
-  kind: 0 | 1 | 2;  // 0=spark, 1=smoke, 2=ring
+  t: number;   // 0→1 (0=alive, 1=dead)
+  dt: number;  // per-frame step
+  color: string; // pre-computed "rgb(r,g,b)" — avoids string alloc in hot loop
+  kind: 0 | 1 | 2; // 0=spark 1=smoke 2=ring
   ringR: number;
   ringDR: number;
 }
 
-// Hard cap — prevents accumulation on rapid merges from lagging mobile
-const MAX_PARTICLES = 60;
+// Keep it small — cheaper on mobile GPU and main thread
+const MAX_PARTICLES = 45;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function hexToRgb(hex: string): [number, number, number] {
+function hexToRgb(hex: string): string {
   const n = parseInt(hex.replace('#', ''), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  return `rgb(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255})`;
 }
 
 function tileCenterPct(row: number, col: number) {
@@ -46,7 +46,7 @@ export function ParticleCanvas({ mergedTiles, mergeSeq }: ParticleCanvasProps) {
   const rafRef     = useRef<number>(0);
   const runningRef = useRef(false);
 
-  // Sync canvas pixel dimensions with CSS display size
+  // Sync canvas pixel size with CSS display size
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -60,9 +60,8 @@ export function ParticleCanvas({ mergedTiles, mergeSeq }: ParticleCanvasProps) {
   }, []);
 
   // ── Render loop ─────────────────────────────────────────────────────────────
-  // Optimised: no createRadialGradient (very expensive on mobile).
-  // Smoke uses flat fill + globalAlpha instead. Ring and sparks are simple arcs.
-  // All state lives in refs — zero React re-renders during animation.
+  // globalAlpha instead of rgba strings → zero string allocation per frame.
+  // No createRadialGradient — flat fills only.
   const animate = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -78,39 +77,44 @@ export function ParticleCanvas({ mergedTiles, mergeSeq }: ParticleCanvasProps) {
       if (p.t >= 1) { ps.splice(i, 1); continue; }
       const alive = 1 - p.t;
 
+      ctx.fillStyle   = p.color;
+      ctx.strokeStyle = p.color;
+
       if (p.kind === 0) {
         // ── Spark ──
-        p.vx *= 0.92;
-        p.vy  = p.vy * 0.92 + 0.2;
+        p.vx *= 0.91;
+        p.vy  = p.vy * 0.91 + 0.22;
         p.x  += p.vx;
         p.y  += p.vy;
+        ctx.globalAlpha = alive * 0.9;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * Math.max(alive, 0.15), 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${(alive * 0.95).toFixed(2)})`;
+        ctx.arc(p.x, p.y, p.size * Math.max(alive, 0.1), 0, Math.PI * 2);
         ctx.fill();
 
       } else if (p.kind === 1) {
-        // ── Smoke (flat fill — no gradient, cheap on mobile) ──
+        // ── Smoke (flat fill, no gradient) ──
         p.x  += p.vx;
         p.y  += p.vy;
-        p.vy -= 0.035;
+        p.vy -= 0.03;
         p.vx *= 0.97;
-        const radius = p.size * (1 + p.t * 2);
+        ctx.globalAlpha = alive * 0.18;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${(alive * 0.22).toFixed(2)})`;
+        ctx.arc(p.x, p.y, p.size * (1 + p.t * 2), 0, Math.PI * 2);
         ctx.fill();
 
       } else {
         // ── Ring ──
         p.ringR += p.ringDR;
+        ctx.globalAlpha = alive * alive * 0.7;
+        ctx.lineWidth   = 2.5 * alive;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.ringR, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(${p.r},${p.g},${p.b},${(alive * alive * 0.75).toFixed(2)})`;
-        ctx.lineWidth = 3 * alive;
         ctx.stroke();
       }
     }
+
+    // Reset globalAlpha for next frame
+    ctx.globalAlpha = 1;
 
     if (ps.length > 0) {
       rafRef.current = requestAnimationFrame(animate);
@@ -126,67 +130,64 @@ export function ParticleCanvas({ mergedTiles, mergeSeq }: ParticleCanvasProps) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const W = canvas.width;
-    const H = canvas.height;
+    const W  = canvas.width;
+    const H  = canvas.height;
     const ps = particles.current;
-    const s  = W / 400; // scale factor (reference = 400px board)
+    const s  = W / 400;
 
     for (const tile of mergedTiles) {
-      // Hard cap — skip new bursts if already at limit
       if (ps.length >= MAX_PARTICLES) break;
 
       const { x: px, y: py } = tileCenterPct(tile.row, tile.col);
-      const cx = (px / 100) * W;
-      const cy = (py / 100) * H;
-      const { bg } = TILE_COLORS[tile.value] ?? TILE_DEFAULT;
-      const [r, g, b] = hexToRgb(bg);
+      const cx    = (px / 100) * W;
+      const cy    = (py / 100) * H;
+      const color = hexToRgb(TILE_COLORS[tile.value]?.bg ?? TILE_DEFAULT.bg);
 
-      // Scale spark count with tile value (more = more epic), but keep it cheap
-      const sparkCount = Math.min(6 + Math.log2(tile.value) * 2, 16) | 0;
-      const room = Math.max(0, MAX_PARTICLES - ps.length);
-      const sparks = Math.min(sparkCount, room);
+      // Sparks — scale count with tile value but keep it cheap
+      const sparkCount = Math.min(5 + Math.log2(tile.value) * 1.5, 14) | 0;
+      const room       = MAX_PARTICLES - ps.length;
+      const sparks     = Math.min(sparkCount, room);
 
-      // Sparks
       for (let i = 0; i < sparks; i++) {
         const angle = (Math.PI * 2 * i) / sparks + (Math.random() - 0.5) * 0.8;
-        const speed = (1.5 + Math.random() * 3.5) * s;
+        const speed = (1.4 + Math.random() * 3) * s;
         ps.push({
           x: cx, y: cy,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
-          size: (2 + Math.random() * 3) * s,
-          t: 0, dt: 1 / (28 + Math.random() * 20),
-          r, g, b, kind: 0,
+          size: (2 + Math.random() * 2.5) * s,
+          t: 0, dt: 1 / (22 + Math.random() * 16),
+          color, kind: 0,
           ringR: 0, ringDR: 0,
         });
       }
 
-      // Smoke puffs — fixed 4 per merge (cheap, still looks great)
-      const smokes = Math.min(4, Math.max(0, MAX_PARTICLES - ps.length));
+      // Smoke — 3 puffs per merge (minimal but visible)
+      const smokes = Math.min(3, MAX_PARTICLES - ps.length);
       for (let i = 0; i < smokes; i++) {
         const angle = Math.random() * Math.PI * 2;
-        const speed = (0.4 + Math.random() * 1.2) * s;
+        const speed = (0.3 + Math.random() * 1) * s;
         ps.push({
-          x: cx + (Math.random() - 0.5) * W * 0.035,
-          y: cy + (Math.random() - 0.5) * H * 0.035,
+          x: cx + (Math.random() - 0.5) * W * 0.03,
+          y: cy + (Math.random() - 0.5) * H * 0.03,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
-          size: (6 + Math.random() * 10) * s,
-          t: 0, dt: 1 / (30 + Math.random() * 20),
-          r, g, b, kind: 1,
+          size: (5 + Math.random() * 8) * s,
+          t: 0, dt: 1 / (25 + Math.random() * 15),
+          color, kind: 1,
           ringR: 0, ringDR: 0,
         });
       }
 
-      // Shockwave ring — 1 per merge
+      // Ring — 1 per merge
       if (ps.length < MAX_PARTICLES) {
-        const ringMaxR = (W / 100) * CELL_SIZE * 0.8;
+        const maxR = (W / 100) * CELL_SIZE * 0.75;
         ps.push({
           x: cx, y: cy,
           vx: 0, vy: 0, size: 0,
-          t: 0, dt: 1 / 20,
-          r, g, b, kind: 2,
-          ringR: 0, ringDR: ringMaxR / 20,
+          t: 0, dt: 1 / 18,
+          color, kind: 2,
+          ringR: 0, ringDR: maxR / 18,
         });
       }
     }
