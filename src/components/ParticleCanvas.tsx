@@ -1,6 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { TileData } from '../utils/gameLogic';
-import { TILE_COLORS, TILE_DEFAULT, BOARD_PAD, CELL_SIZE, CELL_GAP } from '../utils/constants';
+import { BOARD_PAD, CELL_SIZE, CELL_GAP } from '../utils/constants';
+import { useTheme } from '../contexts/ThemeContext';
+import { tileParticleColor } from '../utils/themes';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -11,18 +13,22 @@ interface Particle {
   t: number;   // 0→1 (0=alive, 1=dead)
   dt: number;  // per-frame step
   color: string; // pre-computed "rgb(r,g,b)" — avoids string alloc in hot loop
-  kind: 0 | 1 | 2; // 0=spark 1=smoke 2=ring
+  kind: 0 | 1 | 2 | 3; // 0=spark 1=smoke 2=ring 3=star (aesthetic only)
   ringR: number;
   ringDR: number;
 }
 
 // Keep it small — cheaper on mobile GPU and main thread
-const MAX_PARTICLES = 45;
+const MAX_PARTICLES = 60;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function hexToRgb(hex: string): string {
-  const n = parseInt(hex.replace('#', ''), 16);
+  // Already rgb()? Pass through.
+  if (hex.startsWith('rgb')) return hex;
+  let h = hex.replace('#', '');
+  if (h.length === 3) h = h.split('').map(c => c + c).join('');
+  const n = parseInt(h, 16);
   return `rgb(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255})`;
 }
 
@@ -41,18 +47,28 @@ interface ParticleCanvasProps {
 }
 
 export function ParticleCanvas({ mergedTiles, mergeSeq }: ParticleCanvasProps) {
+  const theme = useTheme();
   const canvasRef  = useRef<HTMLCanvasElement>(null);
   const particles  = useRef<Particle[]>([]);
   const rafRef     = useRef<number>(0);
   const runningRef = useRef(false);
 
-  // Sync canvas pixel size with CSS display size
+  // Keep the theme reference live across renders without re-binding callbacks
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
+
+  // Sync canvas pixel size with CSS display size (and DPR-aware)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const sync = () => {
-      canvas.width  = canvas.offsetWidth;
-      canvas.height = canvas.offsetHeight;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = canvas.offsetWidth;
+      const h = canvas.offsetHeight;
+      canvas.width  = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      const ctx = canvas.getContext('2d');
+      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
     sync();
     window.addEventListener('resize', sync);
@@ -60,16 +76,20 @@ export function ParticleCanvas({ mergedTiles, mergeSeq }: ParticleCanvasProps) {
   }, []);
 
   // ── Render loop ─────────────────────────────────────────────────────────────
-  // globalAlpha instead of rgba strings → zero string allocation per frame.
-  // No createRadialGradient — flat fills only.
   const animate = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d', { alpha: true });
     if (!ctx) return;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const W = canvas.offsetWidth;
+    const H = canvas.offsetHeight;
+    ctx.clearRect(0, 0, W, H);
     const ps = particles.current;
+    const isAesthetic = themeRef.current.id === 'aesthetic';
+
+    // Additive blending on the aesthetic theme = neon glow.
+    ctx.globalCompositeOperation = isAesthetic ? 'lighter' : 'source-over';
 
     for (let i = ps.length - 1; i >= 0; i--) {
       const p = ps[i];
@@ -86,7 +106,7 @@ export function ParticleCanvas({ mergedTiles, mergeSeq }: ParticleCanvasProps) {
         p.vy  = p.vy * 0.91 + 0.22;
         p.x  += p.vx;
         p.y  += p.vy;
-        ctx.globalAlpha = alive * 0.9;
+        ctx.globalAlpha = alive * (isAesthetic ? 0.85 : 0.9);
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size * Math.max(alive, 0.1), 0, Math.PI * 2);
         ctx.fill();
@@ -97,30 +117,46 @@ export function ParticleCanvas({ mergedTiles, mergeSeq }: ParticleCanvasProps) {
         p.y  += p.vy;
         p.vy -= 0.03;
         p.vx *= 0.97;
-        ctx.globalAlpha = alive * 0.18;
+        ctx.globalAlpha = alive * (isAesthetic ? 0.12 : 0.18);
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size * (1 + p.t * 2), 0, Math.PI * 2);
         ctx.fill();
 
-      } else {
+      } else if (p.kind === 2) {
         // ── Ring ──
         p.ringR += p.ringDR;
-        ctx.globalAlpha = alive * alive * 0.7;
-        ctx.lineWidth   = 2.5 * alive;
+        ctx.globalAlpha = alive * alive * (isAesthetic ? 0.85 : 0.7);
+        ctx.lineWidth   = (isAesthetic ? 3 : 2.5) * alive;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.ringR, 0, Math.PI * 2);
+        ctx.stroke();
+
+      } else {
+        // ── Star (aesthetic only) — drifts up slowly, twinkles ──
+        p.x  += p.vx;
+        p.y  += p.vy;
+        p.vy *= 0.99;
+        const tw = 0.6 + Math.sin(p.t * Math.PI * 4) * 0.4;
+        ctx.globalAlpha = alive * tw * 0.95;
+        const r = p.size * Math.max(alive, 0.2);
+        // Tiny 4-point sparkle: two crossed lines
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(p.x - r, p.y);  ctx.lineTo(p.x + r, p.y);
+        ctx.moveTo(p.x, p.y - r);  ctx.lineTo(p.x, p.y + r);
         ctx.stroke();
       }
     }
 
-    // Reset globalAlpha for next frame
+    // Reset for next frame
     ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
 
     if (ps.length > 0) {
       rafRef.current = requestAnimationFrame(animate);
     } else {
       runningRef.current = false;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, W, H);
     }
   }, []);
 
@@ -130,10 +166,11 @@ export function ParticleCanvas({ mergedTiles, mergeSeq }: ParticleCanvasProps) {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const W  = canvas.width;
-    const H  = canvas.height;
+    const W  = canvas.offsetWidth;
+    const H  = canvas.offsetHeight;
     const ps = particles.current;
     const s  = W / 400;
+    const isAesthetic = themeRef.current.id === 'aesthetic';
 
     for (const tile of mergedTiles) {
       if (ps.length >= MAX_PARTICLES) break;
@@ -141,10 +178,12 @@ export function ParticleCanvas({ mergedTiles, mergeSeq }: ParticleCanvasProps) {
       const { x: px, y: py } = tileCenterPct(tile.row, tile.col);
       const cx    = (px / 100) * W;
       const cy    = (py / 100) * H;
-      const color = hexToRgb(TILE_COLORS[tile.value]?.bg ?? TILE_DEFAULT.bg);
+      const color = hexToRgb(tileParticleColor(themeRef.current, tile.value));
 
-      // Sparks — scale count with tile value but keep it cheap
-      const sparkCount = Math.min(5 + Math.log2(tile.value) * 1.5, 14) | 0;
+      // Sparks — slightly more on aesthetic for fireworks feel
+      const baseCount  = isAesthetic ? 7 : 5;
+      const stepFactor = isAesthetic ? 1.8 : 1.5;
+      const sparkCount = Math.min(baseCount + Math.log2(tile.value) * stepFactor, isAesthetic ? 18 : 14) | 0;
       const room       = MAX_PARTICLES - ps.length;
       const sparks     = Math.min(sparkCount, room);
 
@@ -162,7 +201,7 @@ export function ParticleCanvas({ mergedTiles, mergeSeq }: ParticleCanvasProps) {
         });
       }
 
-      // Smoke — 3 puffs per merge (minimal but visible)
+      // Smoke — 3 puffs per merge
       const smokes = Math.min(3, MAX_PARTICLES - ps.length);
       for (let i = 0; i < smokes; i++) {
         const angle = Math.random() * Math.PI * 2;
@@ -190,6 +229,26 @@ export function ParticleCanvas({ mergedTiles, mergeSeq }: ParticleCanvasProps) {
           ringR: 0, ringDR: maxR / 18,
         });
       }
+
+      // Aesthetic only: a few drifting "star" sparkles
+      if (isAesthetic) {
+        const stars = Math.min(4, MAX_PARTICLES - ps.length);
+        for (let i = 0; i < stars; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = (0.5 + Math.random() * 1.4) * s;
+          ps.push({
+            x: cx + (Math.random() - 0.5) * W * 0.04,
+            y: cy + (Math.random() - 0.5) * H * 0.04,
+            vx: Math.cos(angle) * speed * 0.5,
+            vy: Math.sin(angle) * speed * 0.5 - 0.4 * s,
+            size: (3 + Math.random() * 3) * s,
+            t: 0, dt: 1 / (30 + Math.random() * 18),
+            color: 'rgb(255,255,255)',
+            kind: 3,
+            ringR: 0, ringDR: 0,
+          });
+        }
+      }
     }
 
     if (!runningRef.current) {
@@ -211,7 +270,7 @@ export function ParticleCanvas({ mergedTiles, mergeSeq }: ParticleCanvasProps) {
         height: '100%',
         pointerEvents: 'none',
         zIndex: 50,
-        borderRadius: '6px',
+        borderRadius: theme.id === 'aesthetic' ? '14px' : '6px',
       }}
     />
   );

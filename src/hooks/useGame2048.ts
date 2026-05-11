@@ -198,7 +198,14 @@ function reducer(state: State, action: Action): State {
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
-export function useGame2048() {
+interface UseGame2048Options {
+  /** When false, keyboard / swipe input listeners are not registered.
+   *  Useful when another screen (e.g. the main menu) is in front of the game. */
+  inputEnabled?: boolean;
+}
+
+export function useGame2048(options: UseGame2048Options = {}) {
+  const { inputEnabled = true } = options;
   const [state, dispatch] = useReducer(reducer, undefined, init);
 
   // Keep a ref to pendingMerges/pendingMaxMerge for the timer callback
@@ -238,6 +245,7 @@ export function useGame2048() {
 
   // Keyboard
   useEffect(() => {
+    if (!inputEnabled) return;
     const map: Record<string, Direction> = {
       ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
       w: 'up', s: 'down', a: 'left', d: 'right',
@@ -248,11 +256,14 @@ export function useGame2048() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [handleMove]);
+  }, [handleMove, inputEnabled]);
 
   // Touch swipe — intercepts ALL touch movement to prevent Telegram's
-  // swipe-down-to-close gesture from firing during gameplay
+  // swipe-down-to-close gesture from firing during gameplay.
+  // When inputEnabled is false (e.g. menu screen) we don't attach this listener
+  // so the menu can scroll normally.
   useEffect(() => {
+    if (!inputEnabled) return;
     const MIN = 20;
     let sx = 0, sy = 0;
 
@@ -261,9 +272,6 @@ export function useGame2048() {
       sy = e.touches[0].clientY;
     };
     const onMove = (e: TouchEvent) => {
-      // Prevent default unconditionally — this is what blocks Telegram's
-      // vertical swipe detector. We have passive:false on this listener
-      // so preventDefault() is always allowed.
       e.preventDefault();
     };
     const onEnd = (e: TouchEvent) => {
@@ -275,14 +283,14 @@ export function useGame2048() {
     };
 
     window.addEventListener('touchstart', onStart, { passive: true });
-    window.addEventListener('touchmove',  onMove,  { passive: false }); // must stay non-passive
+    window.addEventListener('touchmove',  onMove,  { passive: false });
     window.addEventListener('touchend',   onEnd,   { passive: true });
     return () => {
       window.removeEventListener('touchstart', onStart);
       window.removeEventListener('touchmove',  onMove);
       window.removeEventListener('touchend',   onEnd);
     };
-  }, [handleMove]);
+  }, [handleMove, inputEnabled]);
 
   return {
     tiles:    state.tiles,

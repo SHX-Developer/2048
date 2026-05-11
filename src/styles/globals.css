@@ -8,9 +8,9 @@
 
   body {
     margin: 0;
-    background-color: #faf8ef;
     font-family: 'Clear Sans', 'Helvetica Neue', Arial, sans-serif;
     min-height: 100dvh;
+    /* Background is applied by App.tsx based on the active theme */
   }
 }
 
@@ -27,13 +27,12 @@
 /*
  * Merge pop — ONLY transform. No filter, no color, no box-shadow.
  * transform is the only property that's truly GPU-composited.
- * All other animatable properties force at least a partial repaint on mobile.
  */
 @keyframes tileMerge {
   0%   { transform: scale(1); }
-  20%  { transform: scale(1.24); }
-  46%  { transform: scale(0.94); }
-  70%  { transform: scale(1.07); }
+  20%  { transform: scale(1.26); }
+  46%  { transform: scale(0.93); }
+  70%  { transform: scale(1.08); }
   86%  { transform: scale(0.99); }
   100% { transform: scale(1); }
 }
@@ -41,18 +40,30 @@
 /*
  * Bright overlay — white text + scale-up that appears on merge peak.
  * Separate element → only opacity+transform → zero repaint cost.
- * This is how you get "text gets bright and bigger" without any paint.
  */
 @keyframes tileBright {
   0%   { opacity: 0;   transform: scale(1); }
-  22%  { opacity: 1;   transform: scale(1.35); }
-  55%  { opacity: 0.5; transform: scale(1.12); }
+  22%  { opacity: 1;   transform: scale(1.4); }
+  55%  { opacity: 0.5; transform: scale(1.14); }
   100% { opacity: 0;   transform: scale(1); }
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes menuFadeIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Slow drift on ambient gradients — the only thing that animates on the
+   page background, kept under 6s and uses transform/opacity only. */
+@keyframes ambientShift {
+  0%   { transform: translate3d(0, 0, 0) scale(1);   opacity: 0.85; }
+  50%  { transform: translate3d(2%, -2%, 0) scale(1.06); opacity: 1; }
+  100% { transform: translate3d(-2%, 2%, 0) scale(1);   opacity: 0.9; }
 }
 
 .tile-inner {
@@ -60,12 +71,12 @@
 }
 
 .tile-new {
-  animation: tileNew 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: tileNew 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   will-change: transform, opacity;
 }
 
 .tile-merge {
-  animation: tileMerge 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: tileMerge 0.44s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   will-change: transform;
 }
 
@@ -77,9 +88,46 @@
   align-items: center;
   justify-content: center;
   color: #ffffff;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1;
   pointer-events: none;
-  animation: tileBright 0.42s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: tileBright 0.44s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   will-change: transform, opacity;
+}
+
+/* Aesthetic theme — adds a soft outer pulse on every newly placed tile
+   *without* re-triggering during slides. Pure transform+opacity. */
+@keyframes tilePulseGlow {
+  0%   { transform: scale(1);    opacity: 0.55; }
+  60%  { transform: scale(1.08); opacity: 0; }
+  100% { transform: scale(1.08); opacity: 0; }
+}
+
+.tile-aesthetic.tile-new::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  background: inherit;
+  filter: blur(8px);
+  opacity: 0;
+  z-index: -1;
+  animation: tilePulseGlow 0.55s ease-out forwards;
+  pointer-events: none;
+}
+
+/* Slightly punchier hover/active feedback on the menu Play button */
+.menu-play-btn:hover { transform: translateY(-1px); }
+.menu-play-btn:active { transform: translateY(0) scale(0.98); }
+
+/* Subtle lift when hovering theme cards */
+.theme-card:hover { transform: translateY(-2px); }
+.theme-card:active { transform: translateY(-1px) scale(0.99); }
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }

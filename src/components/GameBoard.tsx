@@ -3,7 +3,8 @@ import type { TileData } from '../utils/gameLogic';
 import { Tile } from './Tile';
 import { GameOverModal } from './GameOverModal';
 import { ParticleCanvas } from './ParticleCanvas';
-import { GRID_SIZE, BOARD_BG, CELL_BG, CELL_SIZE, cellOffset } from '../utils/constants';
+import { GRID_SIZE, CELL_SIZE, cellOffset } from '../utils/constants';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface GameBoardProps {
   tiles: TileData[];
@@ -13,8 +14,13 @@ interface GameBoardProps {
   mergeSeq: number;
 }
 
-// Static background — memoized so it never re-renders
-const BoardBackground = memo(function BoardBackground() {
+interface BoardBackgroundProps {
+  cellBg: string;
+  radius: string;
+}
+
+// Static background — memoized so it never re-renders unless cell color/radius changes
+const BoardBackground = memo(function BoardBackground({ cellBg, radius }: BoardBackgroundProps) {
   return (
     <>
       {Array.from({ length: GRID_SIZE }, (_, r) =>
@@ -27,8 +33,9 @@ const BoardBackground = memo(function BoardBackground() {
               top:    `${cellOffset(r)}%`,
               width:  `${CELL_SIZE}%`,
               height: `${CELL_SIZE}%`,
-              backgroundColor: CELL_BG,
-              borderRadius: '3px',
+              background: cellBg,
+              borderRadius: radius,
+              transition: 'background 0.35s ease',
             }}
           />
         ))
@@ -38,8 +45,12 @@ const BoardBackground = memo(function BoardBackground() {
 });
 
 export function GameBoard({ tiles, score, gameOver, onRestart, mergeSeq }: GameBoardProps) {
+  const theme = useTheme();
   // Only recomputed when `tiles` reference changes — avoids new array on every render
   const mergedTiles = useMemo(() => tiles.filter(t => t.isMerged), [tiles]);
+
+  const radius = theme.id === 'aesthetic' ? '8px' : '3px';
+  const boardRadius = theme.id === 'aesthetic' ? '14px' : '6px';
 
   return (
     <div style={{ position: 'relative', width: '100%', aspectRatio: '1' }}>
@@ -47,12 +58,16 @@ export function GameBoard({ tiles, score, gameOver, onRestart, mergeSeq }: GameB
         style={{
           position: 'absolute',
           inset: 0,
-          backgroundColor: BOARD_BG,
-          borderRadius: '6px',
+          background: theme.boardBg,
+          borderRadius: boardRadius,
           overflow: 'hidden',
+          boxShadow: theme.boardShadow,
+          backdropFilter: theme.id === 'aesthetic' ? 'blur(20px)' : undefined,
+          WebkitBackdropFilter: theme.id === 'aesthetic' ? 'blur(20px)' : undefined,
+          transition: 'background 0.35s ease, box-shadow 0.35s ease',
         }}
       >
-        <BoardBackground />
+        <BoardBackground cellBg={theme.cellBg} radius={radius} />
 
         {tiles.map(tile => (
           <Tile key={tile.id} tile={tile} />

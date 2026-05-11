@@ -1,6 +1,8 @@
 import { memo } from 'react';
 import type { TileData } from '../utils/gameLogic';
-import { TILE_COLORS, TILE_DEFAULT, CELL_SIZE, BOARD_PAD, STEP_RATIO, tileFontSize } from '../utils/constants';
+import { CELL_SIZE, BOARD_PAD, STEP_RATIO, tileFontSize } from '../utils/constants';
+import { useTheme } from '../contexts/ThemeContext';
+import { getTileStyle } from '../utils/themes';
 
 interface TileProps {
   tile: TileData;
@@ -22,7 +24,8 @@ function tilesEqual(prev: TileProps, next: TileProps) {
 }
 
 export const Tile = memo(function Tile({ tile }: TileProps) {
-  const { bg, fg } = TILE_COLORS[tile.value] ?? TILE_DEFAULT;
+  const theme = useTheme();
+  const { bg, fg, glow } = getTileStyle(theme, tile.value);
   const fontSize = tileFontSize(tile.value);
 
   const posStyle: React.CSSProperties = {
@@ -32,19 +35,24 @@ export const Tile = memo(function Tile({ tile }: TileProps) {
     width:  `${CELL_SIZE}%`,
     height: `${CELL_SIZE}%`,
     // Only `transform` changes — GPU-composited, zero layout recalc.
-    // 280ms matches SLIDE_MS. ease-out-sine: gentle start, soft landing — no jarring snap.
     transform:  `translate(${tile.col * STEP_RATIO}%, ${tile.row * STEP_RATIO}%)`,
-    // ease-out-quart: smooth glide, soft landing. 250ms matches SLIDE_MS.
-    transition: tile.isNew ? 'none' : 'transform 250ms cubic-bezier(0.25, 1, 0.5, 1)',
+    // Smooth, slightly anticipating curve: starts a touch quick, soft landing.
+    transition: tile.isNew ? 'none' : 'transform 230ms cubic-bezier(0.22, 0.61, 0.36, 1)',
     zIndex:     tile.isAbsorbed ? 5 : tile.isMerged ? 20 : 10,
-    willChange: 'transform', // keep pre-promoted — 16 small layers is fine on modern phones
+    willChange: 'transform',
   };
 
   const innerClass = [
     'tile-inner',
     tile.isNew    ? 'tile-new'   : '',
     tile.isMerged ? 'tile-merge' : '',
+    theme.id === 'aesthetic' ? 'tile-aesthetic' : '',
   ].filter(Boolean).join(' ');
+
+  // Build the shadow: theme base + (aesthetic only) a colored glow.
+  const shadow = theme.id === 'aesthetic' && glow
+    ? `${theme.tileShadow}, 0 0 18px ${glow}`
+    : theme.tileShadow;
 
   return (
     <div style={posStyle}>
@@ -57,14 +65,16 @@ export const Tile = memo(function Tile({ tile }: TileProps) {
           alignItems: 'center',
           justifyContent: 'center',
           position: 'relative',
-          borderRadius: '3px',
-          backgroundColor: bg,
+          borderRadius: theme.id === 'aesthetic' ? '8px' : '3px',
+          background: bg,
           color: fg,
-          fontWeight: 700,
+          fontWeight: 800,
           fontSize,
           lineHeight: 1,
-          boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+          boxShadow: shadow,
           userSelect: 'none',
+          // Smooth color/glow transition when switching themes
+          transition: 'background 0.35s ease, color 0.35s ease, box-shadow 0.35s ease',
         }}
       >
         {tile.value}
