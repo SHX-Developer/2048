@@ -1,74 +1,66 @@
-# React + TypeScript + Vite
+# 2048 — Telegram Mini App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + Vite + TypeScript SPA, играется внутри Telegram через Mini App.
+Сопровождается ботом на `grammy`, который по `/start` отправляет greeting и кнопку запуска WebApp.
 
-Currently, two official plugins are available:
+## Структура
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+.
+├── src/                 # React приложение (Mini App)
+├── bot/                 # Telegram-бот (Node.js + grammy)
+├── Dockerfile           # web → multi-stage nginx
+├── bot/Dockerfile       # bot → multi-stage node
+├── docker-compose.yml   # для Dokploy: web + bot + Traefik
+└── nginx.conf           # SPA fallback + долгий кэш для /assets
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Локальная разработка
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+```bash
+npm install
+npm run dev          # фронтенд на http://localhost:5173
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+cd bot && npm install
+BOT_TOKEN=... WEB_APP_URL=https://your-tunnel.example npm run dev
 ```
-# 2048
+
+## Деплой через Dokploy
+
+Сборка происходит на VPS силами Dokploy — никаких внешних реестров.
+BuildKit и слои Docker переиспользуются между деплоями, так что после первого
+билда последующие занимают секунды (если не менялся `package-lock.json`).
+
+1. **DNS** — направь `A`-запись поддомена (`2048.example.com`) на IP VPS.
+2. **В Dokploy** → New Application → **Compose**:
+   - Provider — GitHub/Git, репозиторий = этот проект, ветка `main`/`master`
+   - Compose Path — `docker-compose.yml`
+3. **Environment** (вкладка в Dokploy) — заполни по `.env.example`:
+
+   | Имя | Описание |
+   | --- | --- |
+   | `DOMAIN` | поддомен, на который Traefik роутит web (например `2048.example.com`) |
+   | `BOT_TOKEN` | токен от [@BotFather](https://t.me/BotFather) |
+   | `WEB_APP_URL` | публичный https-URL Mini App, обычно `https://${DOMAIN}` |
+   | `DATABASE_URL` | Postgres connection string для бота (опционально) |
+
+4. **Domain** — Dokploy сам подхватит Traefik labels из compose. Если домен
+   добавляешь через UI Dokploy — оставь его таким же, как `DOMAIN`,
+   и убедись, что выбран сервис `web` и порт `80`.
+5. **Auto Deploy** — включи в Dokploy webhook на GitHub: каждый push в ветку
+   будет триггерить `docker compose up -d --build` на VPS.
+
+### Настройка Mini App в @BotFather
+
+После первого деплоя:
+1. `/setmenubutton` → выбери бота → URL = `https://${DOMAIN}` → текст «Играть»
+2. `/setdomain` → укажи `${DOMAIN}` (нужно для inline `web_app` кнопок)
+3. Напиши боту `/start` — придёт greeting с кнопкой запуска игры.
+
+## Почему билд быстрый
+
+- Многостадийные Dockerfile: deps → build → runtime, рантайм-образ содержит только финальный артефакт
+- `--mount=type=cache,target=/root/.npm` в `npm ci` → кэш npm не теряется между билдами
+- Прод-зависимости бота ставятся отдельной стадией `prod-deps`, dev-зависимости в финальный образ не попадают
+- `.dockerignore` исключает `node_modules`, `dist`, `bot/`, `.git`
+- nginx с `immutable`-кэшем для `/assets/*` и SPA-fallback на `/index.html`

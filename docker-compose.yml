@@ -1,0 +1,63 @@
+# Deployment via Dokploy.
+# Dokploy clones this repo on the VPS, builds both images locally and runs them.
+# BuildKit cache is reused between deploys → второй и последующие билды быстрые.
+#
+# Required env (set in Dokploy → Environment):
+#   DOMAIN        – subdomain Traefik routes to the web app (e.g. 2048.example.com)
+#   BOT_TOKEN     – Telegram bot token from @BotFather
+#   WEB_APP_URL   – public https URL of the Mini App, usually https://${DOMAIN}
+#   DATABASE_URL  – Postgres connection string consumed by the bot (optional)
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: 2048-web
+    restart: unless-stopped
+    networks:
+      - dokploy-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=dokploy-network
+      - traefik.http.routers.2048-web.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.2048-web.entrypoints=websecure
+      - traefik.http.routers.2048-web.tls.certresolver=letsencrypt
+      - traefik.http.services.2048-web.loadbalancer.server.port=80
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  bot:
+    build:
+      context: ./bot
+      dockerfile: Dockerfile
+    container_name: 2048-bot
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      BOT_TOKEN: ${BOT_TOKEN}
+      WEB_APP_URL: ${WEB_APP_URL}
+      DATABASE_URL: ${DATABASE_URL:-}
+    networks:
+      - dokploy-network
+    depends_on:
+      web:
+        condition: service_started
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  dokploy-network:
+    external: true
