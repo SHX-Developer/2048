@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { TileData } from '../utils/gameLogic';
-import { BOARD_PAD, CELL_SIZE, CELL_GAP } from '../utils/constants';
+import { BOARD_PAD, CELL_GAP, cellSize } from '../utils/constants';
 import { useTheme } from '../contexts/ThemeContext';
 import { tileParticleColor } from '../utils/themes';
 
@@ -32,10 +32,11 @@ function hexToRgb(hex: string): string {
   return `rgb(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255})`;
 }
 
-function tileCenterPct(row: number, col: number) {
+function tileCenterPct(row: number, col: number, gridSize: number) {
+  const cs = cellSize(gridSize);
   return {
-    x: BOARD_PAD + col * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2,
-    y: BOARD_PAD + row * (CELL_SIZE + CELL_GAP) + CELL_SIZE / 2,
+    x: BOARD_PAD + col * (cs + CELL_GAP) + cs / 2,
+    y: BOARD_PAD + row * (cs + CELL_GAP) + cs / 2,
   };
 }
 
@@ -44,10 +45,13 @@ function tileCenterPct(row: number, col: number) {
 interface ParticleCanvasProps {
   mergedTiles: TileData[];
   mergeSeq: number;
+  gridSize: number;
 }
 
-export function ParticleCanvas({ mergedTiles, mergeSeq }: ParticleCanvasProps) {
+export function ParticleCanvas({ mergedTiles, mergeSeq, gridSize }: ParticleCanvasProps) {
   const theme = useTheme();
+  const gridSizeRef = useRef(gridSize);
+  gridSizeRef.current = gridSize;
   const canvasRef  = useRef<HTMLCanvasElement>(null);
   const particles  = useRef<Particle[]>([]);
   const rafRef     = useRef<number>(0);
@@ -175,7 +179,7 @@ export function ParticleCanvas({ mergedTiles, mergeSeq }: ParticleCanvasProps) {
     for (const tile of mergedTiles) {
       if (ps.length >= MAX_PARTICLES) break;
 
-      const { x: px, y: py } = tileCenterPct(tile.row, tile.col);
+      const { x: px, y: py } = tileCenterPct(tile.row, tile.col, gridSizeRef.current);
       const cx    = (px / 100) * W;
       const cy    = (py / 100) * H;
       const color = hexToRgb(tileParticleColor(themeRef.current, tile.value));
@@ -220,7 +224,7 @@ export function ParticleCanvas({ mergedTiles, mergeSeq }: ParticleCanvasProps) {
 
       // Ring — 1 per merge
       if (ps.length < MAX_PARTICLES) {
-        const maxR = (W / 100) * CELL_SIZE * 0.75;
+        const maxR = (W / 100) * cellSize(gridSizeRef.current) * 0.75;
         ps.push({
           x: cx, y: cy,
           vx: 0, vy: 0, size: 0,

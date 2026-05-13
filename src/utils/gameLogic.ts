@@ -1,5 +1,3 @@
-import { GRID_SIZE } from './constants';
-
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface TileData {
@@ -27,28 +25,28 @@ function nextId() { return ++_id; }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function emptyPositions(tiles: TileData[]): [number, number][] {
+function emptyPositions(tiles: TileData[], gridSize: number): [number, number][] {
   const occupied = new Set(
     tiles.filter(t => !t.isAbsorbed).map(t => `${t.row},${t.col}`)
   );
   const empty: [number, number][] = [];
-  for (let r = 0; r < GRID_SIZE; r++)
-    for (let c = 0; c < GRID_SIZE; c++)
+  for (let r = 0; r < gridSize; r++)
+    for (let c = 0; c < gridSize; c++)
       if (!occupied.has(`${r},${c}`)) empty.push([r, c]);
   return empty;
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-export function createInitialTiles(): TileData[] {
+export function createInitialTiles(gridSize: number): TileData[] {
   let t: TileData[] = [];
-  t = addRandomTile(t);
-  t = addRandomTile(t);
+  t = addRandomTile(t, gridSize);
+  t = addRandomTile(t, gridSize);
   return t;
 }
 
-export function addRandomTile(tiles: TileData[]): TileData[] {
-  const empty = emptyPositions(tiles);
+export function addRandomTile(tiles: TileData[], gridSize: number): TileData[] {
+  const empty = emptyPositions(tiles, gridSize);
   if (!empty.length) return tiles;
   const [row, col] = empty[Math.floor(Math.random() * empty.length)];
   return [
@@ -57,12 +55,12 @@ export function addRandomTile(tiles: TileData[]): TileData[] {
   ];
 }
 
-export function moveTiles(tiles: TileData[], direction: Direction): MoveResult {
+export function moveTiles(tiles: TileData[], direction: Direction, gridSize: number): MoveResult {
   const active = tiles.filter(t => !t.isAbsorbed);
 
   // Build 2-D grid
-  const grid: (TileData | null)[][] = Array.from({ length: GRID_SIZE }, () =>
-    Array(GRID_SIZE).fill(null)
+  const grid: (TileData | null)[][] = Array.from({ length: gridSize }, () =>
+    Array(gridSize).fill(null)
   );
   for (const tile of active) {
     grid[tile.row][tile.col] = { ...tile, isNew: false, isMerged: false };
@@ -80,32 +78,32 @@ export function moveTiles(tiles: TileData[], direction: Direction): MoveResult {
 
   if (direction === 'left' || direction === 'right') {
     const rev = direction === 'right';
-    for (let r = 0; r < GRID_SIZE; r++) {
+    for (let r = 0; r < gridSize; r++) {
       const { slid, gain, absorbed } = processLine(grid[r], rev);
       scoreGain += gain;
       slid.forEach((tile, i) => {
-        const newCol = rev ? GRID_SIZE - 1 - i : i;
+        const newCol = rev ? gridSize - 1 - i : i;
         if (tile.row !== r || tile.col !== newCol) moved = true;
         result.push({ ...tile, row: r, col: newCol });
       });
       absorbed.forEach(({ tile, targetIdx }) => {
-        const targetCol = rev ? GRID_SIZE - 1 - targetIdx : targetIdx;
+        const targetCol = rev ? gridSize - 1 - targetIdx : targetIdx;
         result.push({ ...tile, row: r, col: targetCol, isAbsorbed: true });
       });
     }
   } else {
     const rev = direction === 'down';
-    for (let c = 0; c < GRID_SIZE; c++) {
+    for (let c = 0; c < gridSize; c++) {
       const col = grid.map(row => row[c]);
       const { slid, gain, absorbed } = processLine(col, rev);
       scoreGain += gain;
       slid.forEach((tile, i) => {
-        const newRow = rev ? GRID_SIZE - 1 - i : i;
+        const newRow = rev ? gridSize - 1 - i : i;
         if (tile.row !== newRow || tile.col !== c) moved = true;
         result.push({ ...tile, row: newRow, col: c });
       });
       absorbed.forEach(({ tile, targetIdx }) => {
-        const targetRow = rev ? GRID_SIZE - 1 - targetIdx : targetIdx;
+        const targetRow = rev ? gridSize - 1 - targetIdx : targetIdx;
         result.push({ ...tile, row: targetRow, col: c, isAbsorbed: true });
       });
     }
@@ -115,19 +113,19 @@ export function moveTiles(tiles: TileData[], direction: Direction): MoveResult {
   return { tiles: result, scoreGain, moved: moved || scoreGain > 0 };
 }
 
-export function hasMovesAvailable(tiles: TileData[]): boolean {
+export function hasMovesAvailable(tiles: TileData[], gridSize: number): boolean {
   const active = tiles.filter(t => !t.isAbsorbed);
-  if (active.length < GRID_SIZE * GRID_SIZE) return true; // empty cells exist
+  if (active.length < gridSize * gridSize) return true; // empty cells exist
 
-  const grid: number[][] = Array.from({ length: GRID_SIZE }, () =>
-    Array(GRID_SIZE).fill(0)
+  const grid: number[][] = Array.from({ length: gridSize }, () =>
+    Array(gridSize).fill(0)
   );
   for (const t of active) grid[t.row][t.col] = t.value;
 
-  for (let r = 0; r < GRID_SIZE; r++)
-    for (let c = 0; c < GRID_SIZE; c++) {
-      if (r + 1 < GRID_SIZE && grid[r + 1][c] === grid[r][c]) return true;
-      if (c + 1 < GRID_SIZE && grid[r][c + 1] === grid[r][c]) return true;
+  for (let r = 0; r < gridSize; r++)
+    for (let c = 0; c < gridSize; c++) {
+      if (r + 1 < gridSize && grid[r + 1][c] === grid[r][c]) return true;
+      if (c + 1 < gridSize && grid[r][c + 1] === grid[r][c]) return true;
     }
   return false;
 }

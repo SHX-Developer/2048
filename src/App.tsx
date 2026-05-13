@@ -5,15 +5,31 @@ import { ScorePanel } from './components/ScorePanel';
 import { MainMenu } from './components/MainMenu';
 import { ThemeContext } from './contexts/ThemeContext';
 import { THEMES, loadThemeId, saveThemeId, type ThemeId } from './utils/themes';
+import { GRID_SIZES, type GridSize } from './utils/constants';
 
 type Screen = 'menu' | 'game';
+
+// ─── Grid-size persistence ────────────────────────────────────────────────────
+const GRID_KEY = '2048_grid';
+const loadGridSize = (): GridSize => {
+  try {
+    const raw = parseInt(localStorage.getItem(GRID_KEY) ?? '', 10);
+    if (GRID_SIZES.includes(raw as GridSize)) return raw as GridSize;
+  } catch { /* ignore */ }
+  return 4;
+};
+const saveGridSize = (s: GridSize) => {
+  try { localStorage.setItem(GRID_KEY, String(s)); } catch { /* ignore */ }
+};
 
 export default function App() {
   const [screen, setScreen]     = useState<Screen>('menu');
   const [themeId, setThemeId]   = useState<ThemeId>(() => loadThemeId());
+  const [gridSize, setGridSize] = useState<GridSize>(() => loadGridSize());
   const theme                   = THEMES[themeId];
 
   const { tiles, score, best, gameOver, mergeSeq, restart } = useGame2048({
+    gridSize,
     inputEnabled: screen === 'game',
   });
 
@@ -28,9 +44,13 @@ export default function App() {
     } catch { /* ignore older Telegram versions */ }
   }, []);
 
-  const handleStart = useCallback((id: ThemeId) => {
+  const handleStart = useCallback((id: ThemeId, size: GridSize) => {
     setThemeId(id);
     saveThemeId(id);
+    setGridSize(size);
+    saveGridSize(size);
+    // The hook will auto-restart when gridSize changes; if it's the same,
+    // explicitly restart so a stale board from a previous session is reset.
     restart();
     setScreen('game');
   }, [restart]);
@@ -42,7 +62,11 @@ export default function App() {
   return (
     <ThemeContext.Provider value={theme}>
       {screen === 'menu' ? (
-        <MainMenu initialThemeId={themeId} onStart={handleStart} />
+        <MainMenu
+          initialThemeId={themeId}
+          initialGridSize={gridSize}
+          onStart={handleStart}
+        />
       ) : (
         <div
           style={{
@@ -58,7 +82,7 @@ export default function App() {
             transition: 'background 0.45s ease',
           }}
         >
-          {/* Ambient overlay for aesthetic theme */}
+          {/* Ambient overlay */}
           {theme.ambient && theme.pageAccent && (
             <div
               aria-hidden
@@ -79,7 +103,14 @@ export default function App() {
               onRestart={restart}
               onMenu={handleBackToMenu}
             />
-            <GameBoard tiles={tiles} score={score} gameOver={gameOver} onRestart={restart} mergeSeq={mergeSeq} />
+            <GameBoard
+              tiles={tiles}
+              score={score}
+              gameOver={gameOver}
+              onRestart={restart}
+              mergeSeq={mergeSeq}
+              gridSize={gridSize}
+            />
           </div>
         </div>
       )}

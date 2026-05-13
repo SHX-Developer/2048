@@ -3,7 +3,7 @@ import type { TileData } from '../utils/gameLogic';
 import { Tile } from './Tile';
 import { GameOverModal } from './GameOverModal';
 import { ParticleCanvas } from './ParticleCanvas';
-import { GRID_SIZE, CELL_SIZE, cellOffset } from '../utils/constants';
+import { cellSize, cellOffset } from '../utils/constants';
 import { useTheme } from '../contexts/ThemeContext';
 
 interface GameBoardProps {
@@ -12,27 +12,30 @@ interface GameBoardProps {
   gameOver: boolean;
   onRestart: () => void;
   mergeSeq: number;
+  gridSize: number;
 }
 
 interface BoardBackgroundProps {
+  gridSize: number;
   cellBg: string;
   radius: string;
 }
 
-// Static background — memoized so it never re-renders unless cell color/radius changes
-const BoardBackground = memo(function BoardBackground({ cellBg, radius }: BoardBackgroundProps) {
+// Static background — memoized so it only rerenders when grid size / color changes
+const BoardBackground = memo(function BoardBackground({ gridSize, cellBg, radius }: BoardBackgroundProps) {
+  const cs = cellSize(gridSize);
   return (
     <>
-      {Array.from({ length: GRID_SIZE }, (_, r) =>
-        Array.from({ length: GRID_SIZE }, (_, c) => (
+      {Array.from({ length: gridSize }, (_, r) =>
+        Array.from({ length: gridSize }, (_, c) => (
           <div
             key={`${r}-${c}`}
             style={{
               position: 'absolute',
-              left:   `${cellOffset(c)}%`,
-              top:    `${cellOffset(r)}%`,
-              width:  `${CELL_SIZE}%`,
-              height: `${CELL_SIZE}%`,
+              left:   `${cellOffset(c, gridSize)}%`,
+              top:    `${cellOffset(r, gridSize)}%`,
+              width:  `${cs}%`,
+              height: `${cs}%`,
               background: cellBg,
               borderRadius: radius,
               transition: 'background 0.35s ease',
@@ -44,13 +47,13 @@ const BoardBackground = memo(function BoardBackground({ cellBg, radius }: BoardB
   );
 });
 
-export function GameBoard({ tiles, score, gameOver, onRestart, mergeSeq }: GameBoardProps) {
+export function GameBoard({ tiles, score, gameOver, onRestart, mergeSeq, gridSize }: GameBoardProps) {
   const theme = useTheme();
-  // Only recomputed when `tiles` reference changes — avoids new array on every render
   const mergedTiles = useMemo(() => tiles.filter(t => t.isMerged), [tiles]);
 
-  const radius = theme.id === 'aesthetic' ? '8px' : '3px';
-  const boardRadius = theme.id === 'aesthetic' ? '14px' : '6px';
+  const isClassic = theme.id === 'classic';
+  const cellRadius  = isClassic ? '3px' : '8px';
+  const boardRadius = isClassic ? '6px' : '14px';
 
   return (
     <div style={{ position: 'relative', width: '100%', aspectRatio: '1' }}>
@@ -62,18 +65,18 @@ export function GameBoard({ tiles, score, gameOver, onRestart, mergeSeq }: GameB
           borderRadius: boardRadius,
           overflow: 'hidden',
           boxShadow: theme.boardShadow,
-          backdropFilter: theme.id === 'aesthetic' ? 'blur(20px)' : undefined,
-          WebkitBackdropFilter: theme.id === 'aesthetic' ? 'blur(20px)' : undefined,
+          backdropFilter: !isClassic ? 'blur(20px)' : undefined,
+          WebkitBackdropFilter: !isClassic ? 'blur(20px)' : undefined,
           transition: 'background 0.35s ease, box-shadow 0.35s ease',
         }}
       >
-        <BoardBackground cellBg={theme.cellBg} radius={radius} />
+        <BoardBackground gridSize={gridSize} cellBg={theme.cellBg} radius={cellRadius} />
 
         {tiles.map(tile => (
-          <Tile key={tile.id} tile={tile} />
+          <Tile key={tile.id} tile={tile} gridSize={gridSize} />
         ))}
 
-        <ParticleCanvas mergedTiles={mergedTiles} mergeSeq={mergeSeq} />
+        <ParticleCanvas mergedTiles={mergedTiles} mergeSeq={mergeSeq} gridSize={gridSize} />
       </div>
 
       {gameOver && (

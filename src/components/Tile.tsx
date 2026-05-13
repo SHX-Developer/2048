@@ -1,11 +1,12 @@
 import { memo } from 'react';
 import type { TileData } from '../utils/gameLogic';
-import { CELL_SIZE, BOARD_PAD, STEP_RATIO, tileFontSize } from '../utils/constants';
+import { cellSize, stepRatio, BOARD_PAD, tileFontSize } from '../utils/constants';
 import { useTheme } from '../contexts/ThemeContext';
 import { getTileStyle } from '../utils/themes';
 
 interface TileProps {
   tile: TileData;
+  gridSize: number;
 }
 
 // Skip re-render when nothing visual changed.
@@ -14,6 +15,7 @@ interface TileProps {
 function tilesEqual(prev: TileProps, next: TileProps) {
   const a = prev.tile, b = next.tile;
   return (
+    prev.gridSize === next.gridSize &&
     a.row        === b.row        &&
     a.col        === b.col        &&
     a.value      === b.value      &&
@@ -23,22 +25,22 @@ function tilesEqual(prev: TileProps, next: TileProps) {
   );
 }
 
-export const Tile = memo(function Tile({ tile }: TileProps) {
+export const Tile = memo(function Tile({ tile, gridSize }: TileProps) {
   const theme = useTheme();
   const { bg, fg, glow } = getTileStyle(theme, tile.value);
-  const fontSize = tileFontSize(tile.value);
+  const fontSize = tileFontSize(tile.value, gridSize);
+  const cs       = cellSize(gridSize);
+  const step     = stepRatio(gridSize);
 
   const posStyle: React.CSSProperties = {
     position: 'absolute',
     left: `${BOARD_PAD}%`,
     top:  `${BOARD_PAD}%`,
-    width:  `${CELL_SIZE}%`,
-    height: `${CELL_SIZE}%`,
+    width:  `${cs}%`,
+    height: `${cs}%`,
     // Only `transform` changes — GPU-composited, zero layout recalc.
-    transform:  `translate(${tile.col * STEP_RATIO}%, ${tile.row * STEP_RATIO}%)`,
+    transform:  `translate(${tile.col * step}%, ${tile.row * step}%)`,
     // Weighted easeOutExpo-style curve: gentle acceleration, very soft landing.
-    // 300ms duration matches SLIDE_MS — gives the tiles a "glide" feel
-    // without crossing into sluggish territory.
     transition: tile.isNew ? 'none' : 'transform 300ms cubic-bezier(0.32, 0.72, 0, 1)',
     zIndex:     tile.isAbsorbed ? 5 : tile.isMerged ? 20 : 10,
     willChange: 'transform',
@@ -51,8 +53,7 @@ export const Tile = memo(function Tile({ tile }: TileProps) {
     theme.id === 'aesthetic' ? 'tile-aesthetic' : '',
   ].filter(Boolean).join(' ');
 
-  // Build the shadow: theme base + (aesthetic only) a colored glow.
-  const shadow = theme.id === 'aesthetic' && glow
+  const shadow = theme.id !== 'classic' && glow
     ? `${theme.tileShadow}, 0 0 18px ${glow}`
     : theme.tileShadow;
 
@@ -67,7 +68,7 @@ export const Tile = memo(function Tile({ tile }: TileProps) {
           alignItems: 'center',
           justifyContent: 'center',
           position: 'relative',
-          borderRadius: theme.id === 'aesthetic' ? '8px' : '3px',
+          borderRadius: theme.id === 'classic' ? '3px' : '8px',
           background: bg,
           color: fg,
           fontWeight: 800,
@@ -75,13 +76,10 @@ export const Tile = memo(function Tile({ tile }: TileProps) {
           lineHeight: 1,
           boxShadow: shadow,
           userSelect: 'none',
-          // Smooth color/glow transition when switching themes
           transition: 'background 0.35s ease, color 0.35s ease, box-shadow 0.35s ease',
         }}
       >
         {tile.value}
-        {/* White overlay — fades in+scales at merge peak using only opacity+transform.
-            Fully GPU-composited: zero repaint cost. */}
         {tile.isMerged && (
           <span className="tile-bright" aria-hidden="true" style={{ fontSize }}>
             {tile.value}

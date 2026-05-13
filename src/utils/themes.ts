@@ -9,7 +9,7 @@
  * so adding a third theme later is a single-file change.
  */
 
-export type ThemeId = 'classic' | 'aesthetic';
+export type ThemeId = 'classic' | 'aesthetic' | 'ocean';
 
 export interface TileStyle {
   /** Background — may be a solid color or a CSS gradient string. */
@@ -159,14 +159,63 @@ export const AESTHETIC: Theme = {
   ambient: true,
 };
 
+// ─── Ocean (Cool / Daylight) ──────────────────────────────────────────────────
+
+export const OCEAN: Theme = {
+  id: 'ocean',
+  name: 'Ocean',
+  tagline: 'Cool waves with a sunset on the horizon.',
+
+  pageBg: 'linear-gradient(160deg, #e0f2fe 0%, #bae6fd 50%, #7dd3fc 100%)',
+  pageAccent: 'radial-gradient(circle at 25% 15%, rgba(255,255,255,0.55) 0%, transparent 45%), radial-gradient(circle at 80% 90%, rgba(252,211,77,0.25) 0%, transparent 55%)',
+  boardBg: 'rgba(255, 255, 255, 0.45)',
+  cellBg:  'rgba(255, 255, 255, 0.55)',
+  boardShadow: '0 14px 40px rgba(14, 116, 144, 0.22), inset 0 0 0 1px rgba(255,255,255,0.6)',
+
+  titleColor: '#0c4a6e',
+  textColor:  '#075985',
+  subtleText: '#475569',
+
+  buttonBg:      'linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%)',
+  buttonBgHover: 'linear-gradient(135deg, #22d3ee 0%, #60a5fa 100%)',
+  buttonFg:      '#ffffff',
+
+  scoreBoxBg:    'rgba(255, 255, 255, 0.6)',
+  scoreBoxLabel: '#0369a1',
+  scoreBoxValue: '#0c4a6e',
+
+  modalOverlay: 'rgba(186, 230, 253, 0.72)',
+  modalText:    '#0c4a6e',
+
+  tileDefault: { bg: 'linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%)', fg: '#ffffff', glow: 'rgba(15,23,42,0.45)' },
+  tiles: {
+    2:    { bg: 'linear-gradient(135deg, #fefce8 0%, #fef3c7 100%)', fg: '#0c4a6e', glow: 'rgba(254,243,199,0.55)' },
+    4:    { bg: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)', fg: '#0c4a6e', glow: 'rgba(186,230,253,0.6)' },
+    8:    { bg: 'linear-gradient(135deg, #7dd3fc 0%, #38bdf8 100%)', fg: '#ffffff', glow: 'rgba(56,189,248,0.55)' },
+    16:   { bg: 'linear-gradient(135deg, #38bdf8 0%, #0ea5e9 100%)', fg: '#ffffff', glow: 'rgba(14,165,233,0.6)' },
+    32:   { bg: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)', fg: '#ffffff', glow: 'rgba(2,132,199,0.65)' },
+    64:   { bg: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)', fg: '#ffffff', glow: 'rgba(8,145,178,0.65)' },
+    128:  { bg: 'linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%)', fg: '#ffffff', glow: 'rgba(20,184,166,0.65)' },
+    256:  { bg: 'linear-gradient(135deg, #34d399 0%, #10b981 100%)', fg: '#ffffff', glow: 'rgba(16,185,129,0.65)' },
+    512:  { bg: 'linear-gradient(135deg, #fcd34d 0%, #f59e0b 100%)', fg: '#ffffff', glow: 'rgba(245,158,11,0.7)' },
+    1024: { bg: 'linear-gradient(135deg, #fb923c 0%, #ea580c 100%)', fg: '#ffffff', glow: 'rgba(234,88,12,0.75)' },
+    2048: { bg: 'linear-gradient(135deg, #fde047 0%, #f97316 50%, #db2777 100%)', fg: '#ffffff', glow: 'rgba(249,115,22,0.85)' },
+  },
+
+  tileShadow: '0 4px 14px rgba(14, 116, 144, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.45)',
+  particleColors: ['#06b6d4', '#3b82f6', '#14b8a6', '#fcd34d', '#f97316'],
+  ambient: true,
+};
+
 // ─── Registry ────────────────────────────────────────────────────────────────
 
 export const THEMES: Record<ThemeId, Theme> = {
   classic:   CLASSIC,
   aesthetic: AESTHETIC,
+  ocean:     OCEAN,
 };
 
-export const THEME_LIST: Theme[] = [CLASSIC, AESTHETIC];
+export const THEME_LIST: Theme[] = [CLASSIC, AESTHETIC, OCEAN];
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -197,7 +246,7 @@ const THEME_KEY = '2048_theme';
 export const loadThemeId = (): ThemeId => {
   try {
     const raw = localStorage.getItem(THEME_KEY);
-    if (raw === 'classic' || raw === 'aesthetic') return raw;
+    if (raw === 'classic' || raw === 'aesthetic' || raw === 'ocean') return raw;
   } catch { /* ignore */ }
   return 'classic';
 };
