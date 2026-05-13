@@ -40,8 +40,9 @@ export const Tile = memo(function Tile({ tile, gridSize }: TileProps) {
     height: `${cs}%`,
     // Only `transform` changes — GPU-composited, zero layout recalc.
     transform:  `translate(${tile.col * step}%, ${tile.row * step}%)`,
-    // Weighted easeOutExpo-style curve: gentle acceleration, very soft landing.
-    transition: tile.isNew ? 'none' : 'transform 300ms cubic-bezier(0.32, 0.72, 0, 1)',
+    // "Soft snap" curve: gentle acceleration + micro-overshoot (p2y=1.06) so
+    // tiles settle into place instead of stopping abruptly. 320ms feels weighted.
+    transition: tile.isNew ? 'none' : 'transform 320ms cubic-bezier(0.22, 0.95, 0.36, 1.06)',
     zIndex:     tile.isAbsorbed ? 5 : tile.isMerged ? 20 : 10,
     willChange: 'transform',
   };

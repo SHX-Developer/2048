@@ -1,8 +1,9 @@
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import type { TileData } from '../utils/gameLogic';
 import { Tile } from './Tile';
 import { GameOverModal } from './GameOverModal';
 import { ParticleCanvas } from './ParticleCanvas';
+import { ScorePopups } from './ScorePopups';
 import { cellSize, cellOffset } from '../utils/constants';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -47,9 +48,34 @@ const BoardBackground = memo(function BoardBackground({ gridSize, cellBg, radius
   );
 });
 
+/** Threshold above which a created tile shakes the board for impact. */
+const MILESTONE = 1024;
+
 export function GameBoard({ tiles, score, gameOver, onRestart, mergeSeq, gridSize }: GameBoardProps) {
   const theme = useTheme();
   const mergedTiles = useMemo(() => tiles.filter(t => t.isMerged), [tiles]);
+
+  // Trigger board-shake when a milestone tile (≥1024) is created.
+  // shakeTick increments per milestone so the CSS animation re-fires via
+  // a className toggle (no remount → tiles & particles keep their state).
+  const [shakeTick, setShakeTick] = useState(0);
+  const [shaking, setShaking]     = useState(false);
+  useEffect(() => {
+    if (mergeSeq === 0) return;
+    if (mergedTiles.some(t => t.value >= MILESTONE)) {
+      setShakeTick(k => k + 1);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mergeSeq]);
+  useEffect(() => {
+    if (shakeTick === 0) return;
+    setShaking(false);
+    // RAF-then-set tick: removes the class for one frame so re-adding it
+    // restarts the keyframe animation cleanly.
+    const raf = requestAnimationFrame(() => setShaking(true));
+    const off = setTimeout(() => setShaking(false), 600);
+    return () => { cancelAnimationFrame(raf); clearTimeout(off); };
+  }, [shakeTick]);
 
   const isClassic = theme.id === 'classic';
   const cellRadius  = isClassic ? '3px' : '8px';
@@ -58,6 +84,7 @@ export function GameBoard({ tiles, score, gameOver, onRestart, mergeSeq, gridSiz
   return (
     <div style={{ position: 'relative', width: '100%', aspectRatio: '1' }}>
       <div
+        className={shaking ? 'board-shake' : undefined}
         style={{
           position: 'absolute',
           inset: 0,
@@ -77,6 +104,7 @@ export function GameBoard({ tiles, score, gameOver, onRestart, mergeSeq, gridSiz
         ))}
 
         <ParticleCanvas mergedTiles={mergedTiles} mergeSeq={mergeSeq} gridSize={gridSize} />
+        <ScorePopups   mergedTiles={mergedTiles} mergeSeq={mergeSeq} gridSize={gridSize} />
       </div>
 
       {gameOver && (

@@ -16,11 +16,12 @@
 
 /* ── Tile animations ─────────────────────────────────────────── */
 
-/* New tile — scale + fade. Only transform+opacity → fully compositable. */
+/* New tile — scale + fade with a more pronounced bounce so spawns feel "alive". */
 @keyframes tileNew {
-  0%   { transform: scale(0.45); opacity: 0; }
-  60%  { transform: scale(1.1);  opacity: 1; }
-  82%  { transform: scale(0.96); }
+  0%   { transform: scale(0.3);  opacity: 0; }
+  50%  { transform: scale(1.15); opacity: 1; }
+  72%  { transform: scale(0.92); }
+  88%  { transform: scale(1.04); }
   100% { transform: scale(1);    opacity: 1; }
 }
 
@@ -79,6 +80,37 @@
   to   { opacity: 1; transform: scale(1); }
 }
 
+/* "+N" score popup — pops in with a small bounce, drifts up, fades. */
+@keyframes scorePopup {
+  0%   { transform: translateY(0)    scale(0.5); opacity: 0; }
+  15%  { transform: translateY(-12%) scale(1.2); opacity: 1; }
+  30%  { transform: translateY(-30%) scale(1);   opacity: 1; }
+  100% { transform: translateY(-180%) scale(0.85); opacity: 0; }
+}
+
+.score-popup {
+  display: inline-block;
+  animation: scorePopup 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+/* Board shake — fires when a milestone tile (>=1024) is created.
+   Translate-only so it stays GPU-composited. */
+@keyframes boardShake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  12%      { transform: translate3d(-4px, 2px, 0); }
+  26%      { transform: translate3d(4px, -2px, 0); }
+  40%      { transform: translate3d(-3px, 3px, 0); }
+  54%      { transform: translate3d(3px, -2px, 0); }
+  68%      { transform: translate3d(-2px, 1px, 0); }
+  84%      { transform: translate3d(1px, -1px, 0); }
+}
+
+.board-shake {
+  animation: boardShake 0.55s cubic-bezier(0.36, 0, 0.66, 1);
+  will-change: transform;
+}
+
 @keyframes menuFadeIn {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -97,7 +129,7 @@
 }
 
 .tile-new {
-  animation: tileNew 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: tileNew 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   will-change: transform, opacity;
 }
 

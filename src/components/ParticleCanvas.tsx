@@ -2,9 +2,20 @@ import { useEffect, useRef, useCallback } from 'react';
 import type { TileData } from '../utils/gameLogic';
 import { BOARD_PAD, CELL_GAP, cellSize } from '../utils/constants';
 import { useTheme } from '../contexts/ThemeContext';
-import { tileParticleColor } from '../utils/themes';
+import { tileParticleColor, type ThemeId } from '../utils/themes';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+
+/**
+ * Particle kinds:
+ *  0 spark   — radial burst (always)
+ *  1 smoke   — soft fade puff (default)
+ *  2 ring    — expanding circle (always)
+ *  3 star    — 4-point twinkle (aesthetic / peach / ice)
+ *  4 ember   — bright dot rising upward, slow fade (fire)
+ *  5 bubble  — hollow stroked circle rising upward (ocean)
+ */
+type Kind = 0 | 1 | 2 | 3 | 4 | 5;
 
 interface Particle {
   x: number; y: number;
@@ -12,19 +23,21 @@ interface Particle {
   size: number;
   t: number;   // 0→1 (0=alive, 1=dead)
   dt: number;  // per-frame step
-  color: string; // pre-computed "rgb(r,g,b)" — avoids string alloc in hot loop
-  kind: 0 | 1 | 2 | 3; // 0=spark 1=smoke 2=ring 3=star (aesthetic only)
+  color: string;
+  kind: Kind;
   ringR: number;
   ringDR: number;
+  /** Optional rotation for some particle kinds. */
+  rot: number;
+  drot: number;
 }
 
-// Keep it small — cheaper on mobile GPU and main thread
-const MAX_PARTICLES = 60;
+// Cap is generous but bounded — sparks fade fast, embers/bubbles linger longer.
+const MAX_PARTICLES = 90;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function hexToRgb(hex: string): string {
-  // Already rgb()? Pass through.
   if (hex.startsWith('rgb')) return hex;
   let h = hex.replace('#', '');
   if (h.length === 3) h = h.split('').map(c => c + c).join('');
@@ -38,6 +51,19 @@ function tileCenterPct(row: number, col: number, gridSize: number) {
     x: BOARD_PAD + col * (cs + CELL_GAP) + cs / 2,
     y: BOARD_PAD + row * (cs + CELL_GAP) + cs / 2,
   };
+}
+
+/** Quick blank Particle factory — fills the unused fields with defaults. */
+function makeParticle(p: Partial<Particle> & Pick<Particle, 'x' | 'y' | 'color' | 'kind'>): Particle {
+  return {
+    vx: 0, vy: 0, size: 1, t: 0, dt: 0.05,
+    ringR: 0, ringDR: 0, rot: 0, drot: 0,
+    ...p,
+  } as Particle;
+}
+
+function isDarkTheme(id: ThemeId): boolean {
+  return id === 'aesthetic' || id === 'fire';
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -57,11 +83,10 @@ export function ParticleCanvas({ mergedTiles, mergeSeq, gridSize }: ParticleCanv
   const rafRef     = useRef<number>(0);
   const runningRef = useRef(false);
 
-  // Keep the theme reference live across renders without re-binding callbacks
   const themeRef = useRef(theme);
   themeRef.current = theme;
 
-  // Sync canvas pixel size with CSS display size (and DPR-aware)
+  // Sync canvas pixel size with CSS size (DPR-aware)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -89,11 +114,12 @@ export function ParticleCanvas({ mergedTiles, mergeSeq, gridSize }: ParticleCanv
     const W = canvas.offsetWidth;
     const H = canvas.offsetHeight;
     ctx.clearRect(0, 0, W, H);
-    const ps = particles.current;
-    const isAesthetic = themeRef.current.id === 'aesthetic';
+    const ps   = particles.current;
+    const id   = themeRef.current.id;
+    const dark = isDarkTheme(id);
 
-    // Additive blending on the aesthetic theme = neon glow.
-    ctx.globalCompositeOperation = isAesthetic ? 'lighter' : 'source-over';
+    // Additive blending on dark themes = neon glow.
+    ctx.globalCompositeOperation = dark ? 'lighter' : 'source-over';
 
     for (let i = ps.length - 1; i >= 0; i--) {
       const p = ps[i];
@@ -104,55 +130,91 @@ export function ParticleCanvas({ mergedTiles, mergeSeq, gridSize }: ParticleCanv
       ctx.fillStyle   = p.color;
       ctx.strokeStyle = p.color;
 
-      if (p.kind === 0) {
-        // ── Spark ──
-        p.vx *= 0.91;
-        p.vy  = p.vy * 0.91 + 0.22;
-        p.x  += p.vx;
-        p.y  += p.vy;
-        ctx.globalAlpha = alive * (isAesthetic ? 0.85 : 0.9);
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * Math.max(alive, 0.1), 0, Math.PI * 2);
-        ctx.fill();
+      switch (p.kind) {
 
-      } else if (p.kind === 1) {
-        // ── Smoke (flat fill, no gradient) ──
-        p.x  += p.vx;
-        p.y  += p.vy;
-        p.vy -= 0.03;
-        p.vx *= 0.97;
-        ctx.globalAlpha = alive * (isAesthetic ? 0.12 : 0.18);
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * (1 + p.t * 2), 0, Math.PI * 2);
-        ctx.fill();
+        case 0: { // ── Spark ──
+          p.vx *= 0.91;
+          p.vy  = p.vy * 0.91 + 0.22;
+          p.x  += p.vx;
+          p.y  += p.vy;
+          ctx.globalAlpha = alive * (dark ? 0.85 : 0.9);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * Math.max(alive, 0.1), 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
 
-      } else if (p.kind === 2) {
-        // ── Ring ──
-        p.ringR += p.ringDR;
-        ctx.globalAlpha = alive * alive * (isAesthetic ? 0.85 : 0.7);
-        ctx.lineWidth   = (isAesthetic ? 3 : 2.5) * alive;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.ringR, 0, Math.PI * 2);
-        ctx.stroke();
+        case 1: { // ── Smoke ──
+          p.x  += p.vx;
+          p.y  += p.vy;
+          p.vy -= 0.03;
+          p.vx *= 0.97;
+          ctx.globalAlpha = alive * (dark ? 0.12 : 0.18);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * (1 + p.t * 2), 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
 
-      } else {
-        // ── Star (aesthetic only) — drifts up slowly, twinkles ──
-        p.x  += p.vx;
-        p.y  += p.vy;
-        p.vy *= 0.99;
-        const tw = 0.6 + Math.sin(p.t * Math.PI * 4) * 0.4;
-        ctx.globalAlpha = alive * tw * 0.95;
-        const r = p.size * Math.max(alive, 0.2);
-        // Tiny 4-point sparkle: two crossed lines
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(p.x - r, p.y);  ctx.lineTo(p.x + r, p.y);
-        ctx.moveTo(p.x, p.y - r);  ctx.lineTo(p.x, p.y + r);
-        ctx.stroke();
+        case 2: { // ── Ring ──
+          p.ringR += p.ringDR;
+          ctx.globalAlpha = alive * alive * (dark ? 0.85 : 0.7);
+          ctx.lineWidth   = (dark ? 3 : 2.5) * alive;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.ringR, 0, Math.PI * 2);
+          ctx.stroke();
+          break;
+        }
+
+        case 3: { // ── Star sparkle ── (twinkling 4-point cross)
+          p.x  += p.vx;
+          p.y  += p.vy;
+          p.vy *= 0.99;
+          p.rot += p.drot;
+          const tw = 0.55 + Math.sin(p.t * Math.PI * 4) * 0.45;
+          ctx.globalAlpha = alive * tw * 0.95;
+          const r = p.size * Math.max(alive, 0.2);
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(-r, 0); ctx.lineTo(r, 0);
+          ctx.moveTo(0, -r); ctx.lineTo(0, r);
+          ctx.stroke();
+          ctx.restore();
+          break;
+        }
+
+        case 4: { // ── Ember ── (rising bright dot, flickers)
+          p.x  += p.vx;
+          p.y  += p.vy;
+          p.vy += 0.02;          // slight gravity but vy starts strongly negative
+          p.vx *= 0.985;
+          // Flicker — multiplies alpha
+          const flicker = 0.7 + 0.3 * Math.sin(p.t * Math.PI * 10 + p.rot);
+          ctx.globalAlpha = alive * flicker;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * Math.max(alive, 0.3), 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        }
+
+        case 5: { // ── Bubble ── (hollow stroked circle, rises)
+          p.x  += p.vx;
+          p.y  += p.vy;
+          p.vy *= 0.995;        // tiny deceleration
+          p.vx += Math.sin(p.t * Math.PI * 2 + p.rot) * 0.04;  // gentle horizontal sway
+          ctx.globalAlpha = alive * alive * 0.85;
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * (1 + p.t * 0.5), 0, Math.PI * 2);
+          ctx.stroke();
+          break;
+        }
       }
     }
 
-    // Reset for next frame
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
 
@@ -164,7 +226,7 @@ export function ParticleCanvas({ mergedTiles, mergeSeq, gridSize }: ParticleCanv
     }
   }, []);
 
-  // ── Spawn ────────────────────────────────────────────────────────────────────
+  // ── Spawn on every merge ────────────────────────────────────────────────────
   useEffect(() => {
     if (mergeSeq === 0 || mergedTiles.length === 0) return;
     const canvas = canvasRef.current;
@@ -174,85 +236,183 @@ export function ParticleCanvas({ mergedTiles, mergeSeq, gridSize }: ParticleCanv
     const H  = canvas.offsetHeight;
     const ps = particles.current;
     const s  = W / 400;
-    const isAesthetic = themeRef.current.id === 'aesthetic';
+    const id   = themeRef.current.id;
+    const dark = isDarkTheme(id);
+    const room = () => MAX_PARTICLES - ps.length;
+
+    // Track the average position for a possible chain-merge bonus ring.
+    let cxSum = 0, cySum = 0;
 
     for (const tile of mergedTiles) {
-      if (ps.length >= MAX_PARTICLES) break;
+      if (room() <= 0) break;
 
       const { x: px, y: py } = tileCenterPct(tile.row, tile.col, gridSizeRef.current);
-      const cx    = (px / 100) * W;
-      const cy    = (py / 100) * H;
+      const cx = (px / 100) * W;
+      const cy = (py / 100) * H;
+      cxSum += cx; cySum += cy;
       const color = hexToRgb(tileParticleColor(themeRef.current, tile.value));
 
-      // Sparks — slightly more on aesthetic for fireworks feel
-      const baseCount  = isAesthetic ? 7 : 5;
-      const stepFactor = isAesthetic ? 1.8 : 1.5;
-      const sparkCount = Math.min(baseCount + Math.log2(tile.value) * stepFactor, isAesthetic ? 18 : 14) | 0;
-      const room       = MAX_PARTICLES - ps.length;
-      const sparks     = Math.min(sparkCount, room);
+      // ── Sparks — count grows with tile value, capped per theme ──
+      const baseCount  = dark ? 7 : 5;
+      const stepFactor = dark ? 1.9 : 1.6;
+      const sparkCap   = dark ? 20 : 16;
+      // Milestone bonus: tiles ≥256 get an extra burst of sparks.
+      const milestoneBoost = tile.value >= 256 ? 4 : 0;
+      const sparkCount = Math.min(
+        baseCount + Math.log2(tile.value) * stepFactor + milestoneBoost,
+        sparkCap,
+      ) | 0;
+      const sparks = Math.min(sparkCount, room());
 
       for (let i = 0; i < sparks; i++) {
-        const angle = (Math.PI * 2 * i) / sparks + (Math.random() - 0.5) * 0.8;
+        const angle = (Math.PI * 2 * i) / sparks + (Math.random() - 0.5) * 0.7;
         const speed = (1.4 + Math.random() * 3) * s;
-        ps.push({
+        ps.push(makeParticle({
           x: cx, y: cy,
           vx: Math.cos(angle) * speed,
           vy: Math.sin(angle) * speed,
           size: (2 + Math.random() * 2.5) * s,
-          t: 0, dt: 1 / (22 + Math.random() * 16),
+          dt: 1 / (22 + Math.random() * 16),
           color, kind: 0,
-          ringR: 0, ringDR: 0,
-        });
+        }));
       }
 
-      // Smoke — 3 puffs per merge
-      const smokes = Math.min(3, MAX_PARTICLES - ps.length);
-      for (let i = 0; i < smokes; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = (0.3 + Math.random() * 1) * s;
-        ps.push({
-          x: cx + (Math.random() - 0.5) * W * 0.03,
-          y: cy + (Math.random() - 0.5) * H * 0.03,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          size: (5 + Math.random() * 8) * s,
-          t: 0, dt: 1 / (25 + Math.random() * 15),
-          color, kind: 1,
-          ringR: 0, ringDR: 0,
-        });
+      // ── Smoke — only on non-fire (fire replaces this with embers) ──
+      if (id !== 'fire') {
+        const smokes = Math.min(3, room());
+        for (let i = 0; i < smokes; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = (0.3 + Math.random() * 1) * s;
+          ps.push(makeParticle({
+            x: cx + (Math.random() - 0.5) * W * 0.03,
+            y: cy + (Math.random() - 0.5) * H * 0.03,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            size: (5 + Math.random() * 8) * s,
+            dt: 1 / (25 + Math.random() * 15),
+            color, kind: 1,
+          }));
+        }
       }
 
-      // Ring — 1 per merge
-      if (ps.length < MAX_PARTICLES) {
+      // ── Ring — 1 per merge ──
+      if (room() > 0) {
         const maxR = (W / 100) * cellSize(gridSizeRef.current) * 0.75;
-        ps.push({
+        ps.push(makeParticle({
           x: cx, y: cy,
-          vx: 0, vy: 0, size: 0,
-          t: 0, dt: 1 / 18,
+          dt: 1 / 18,
           color, kind: 2,
-          ringR: 0, ringDR: maxR / 18,
-        });
+          ringDR: maxR / 18,
+        }));
       }
 
-      // Aesthetic only: a few drifting "star" sparkles
-      if (isAesthetic) {
-        const stars = Math.min(4, MAX_PARTICLES - ps.length);
+      // ── Theme-specific bonus layer ───────────────────────────────────────
+      if (id === 'fire') {
+        // Embers — bright dots rising upward in a fan
+        const embers = Math.min(6, room());
+        for (let i = 0; i < embers; i++) {
+          const angle = -Math.PI / 2 + (Math.random() - 0.5) * 1.2; // upward fan
+          const speed = (1.5 + Math.random() * 2.2) * s;
+          // 70% tile color, 30% bright yellow/white tip for hot embers
+          const useHot = Math.random() < 0.35;
+          const emberColor = useHot ? 'rgb(255, 230, 130)' : color;
+          ps.push(makeParticle({
+            x: cx + (Math.random() - 0.5) * W * 0.04,
+            y: cy + (Math.random() - 0.5) * H * 0.02,
+            vx: Math.cos(angle) * speed * 0.5,
+            vy: Math.sin(angle) * speed,
+            size: (2 + Math.random() * 2) * s,
+            dt: 1 / (38 + Math.random() * 20),
+            color: emberColor, kind: 4,
+            rot: Math.random() * Math.PI * 2,
+          }));
+        }
+      } else if (id === 'ocean') {
+        // Bubbles — hollow circles rising slowly
+        const bubbles = Math.min(5, room());
+        for (let i = 0; i < bubbles; i++) {
+          const speed = (0.6 + Math.random() * 1.0) * s;
+          ps.push(makeParticle({
+            x: cx + (Math.random() - 0.5) * W * 0.06,
+            y: cy + (Math.random() - 0.5) * H * 0.03,
+            vx: (Math.random() - 0.5) * 0.4 * s,
+            vy: -speed,
+            size: (3 + Math.random() * 4) * s,
+            dt: 1 / (40 + Math.random() * 20),
+            color: 'rgb(255,255,255)', kind: 5,
+            rot: Math.random() * Math.PI * 2,
+          }));
+        }
+      } else if (id === 'ice') {
+        // Crystal sparkles — like aesthetic but slower, blue-tinted
+        const crystals = Math.min(5, room());
+        for (let i = 0; i < crystals; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = (0.4 + Math.random() * 1.0) * s;
+          ps.push(makeParticle({
+            x: cx + (Math.random() - 0.5) * W * 0.05,
+            y: cy + (Math.random() - 0.5) * H * 0.05,
+            vx: Math.cos(angle) * speed * 0.4,
+            vy: Math.sin(angle) * speed * 0.4 + 0.1 * s, // slight downward drift
+            size: (3.5 + Math.random() * 3) * s,
+            dt: 1 / (35 + Math.random() * 18),
+            color: 'rgb(220, 240, 255)', kind: 3,
+            rot: Math.random() * Math.PI * 2,
+            drot: (Math.random() - 0.5) * 0.08,
+          }));
+        }
+      } else if (id === 'aesthetic') {
+        // Stars — existing twilight twinkle
+        const stars = Math.min(4, room());
         for (let i = 0; i < stars; i++) {
           const angle = Math.random() * Math.PI * 2;
           const speed = (0.5 + Math.random() * 1.4) * s;
-          ps.push({
+          ps.push(makeParticle({
             x: cx + (Math.random() - 0.5) * W * 0.04,
             y: cy + (Math.random() - 0.5) * H * 0.04,
             vx: Math.cos(angle) * speed * 0.5,
             vy: Math.sin(angle) * speed * 0.5 - 0.4 * s,
             size: (3 + Math.random() * 3) * s,
-            t: 0, dt: 1 / (30 + Math.random() * 18),
-            color: 'rgb(255,255,255)',
-            kind: 3,
-            ringR: 0, ringDR: 0,
-          });
+            dt: 1 / (30 + Math.random() * 18),
+            color: 'rgb(255,255,255)', kind: 3,
+            rot: Math.random() * Math.PI * 2,
+            drot: (Math.random() - 0.5) * 0.06,
+          }));
+        }
+      } else if (id === 'peach') {
+        // Soft pink sparkles — warm twinkle
+        const sparkles = Math.min(3, room());
+        for (let i = 0; i < sparkles; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = (0.5 + Math.random() * 1.2) * s;
+          ps.push(makeParticle({
+            x: cx + (Math.random() - 0.5) * W * 0.04,
+            y: cy + (Math.random() - 0.5) * H * 0.04,
+            vx: Math.cos(angle) * speed * 0.4,
+            vy: Math.sin(angle) * speed * 0.4 - 0.3 * s,
+            size: (2.5 + Math.random() * 2.5) * s,
+            dt: 1 / (32 + Math.random() * 16),
+            color: 'rgb(255, 190, 215)', kind: 3,
+            rot: Math.random() * Math.PI * 2,
+            drot: (Math.random() - 0.5) * 0.05,
+          }));
         }
       }
+    }
+
+    // ── Chain-merge bonus: when ≥2 tiles merge in one move, spawn a big
+    // celebratory ring at their centroid. ────────────────────────────────────
+    if (mergedTiles.length >= 2 && room() > 0) {
+      const ccx = cxSum / mergedTiles.length;
+      const ccy = cySum / mergedTiles.length;
+      const maxR = (W / 100) * cellSize(gridSizeRef.current) * 1.1;
+      ps.push(makeParticle({
+        x: ccx, y: ccy,
+        dt: 1 / 28,
+        color: dark ? 'rgb(255, 240, 200)' : 'rgb(255, 255, 255)',
+        kind: 2,
+        ringDR: maxR / 28,
+      }));
     }
 
     if (!runningRef.current) {
@@ -274,7 +434,7 @@ export function ParticleCanvas({ mergedTiles, mergeSeq, gridSize }: ParticleCanv
         height: '100%',
         pointerEvents: 'none',
         zIndex: 50,
-        borderRadius: theme.id === 'aesthetic' ? '14px' : '6px',
+        borderRadius: theme.id === 'classic' ? '6px' : '14px',
       }}
     />
   );
