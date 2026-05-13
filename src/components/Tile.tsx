@@ -50,7 +50,9 @@ export const Tile = memo(function Tile({ tile, gridSize }: TileProps) {
     'tile-inner',
     tile.isNew    ? 'tile-new'   : '',
     tile.isMerged ? 'tile-merge' : '',
-    theme.id === 'aesthetic' ? 'tile-aesthetic' : '',
+    // One class per theme — lets CSS target per-theme merge halos
+    // (and the aesthetic-only spawn pulse glow).
+    theme.id !== 'classic' ? `tile-${theme.id}` : '',
   ].filter(Boolean).join(' ');
 
   const shadow = theme.id !== 'classic' && glow

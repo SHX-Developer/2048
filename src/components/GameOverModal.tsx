@@ -7,14 +7,15 @@ interface GameOverModalProps {
 
 export function GameOverModal({ score, onRestart }: GameOverModalProps) {
   const theme = useTheme();
-  const isAesthetic = theme.id === 'aesthetic';
+  const isClassic = theme.id === 'classic';
+  const isDark    = theme.id === 'aesthetic' || theme.id === 'fire';
 
   return (
     <div
       style={{
         position: 'absolute',
         inset: 0,
-        borderRadius: isAesthetic ? '14px' : '6px',
+        borderRadius: isClassic ? '6px' : '14px',
         background: theme.modalOverlay,
         display: 'flex',
         flexDirection: 'column',
@@ -22,8 +23,8 @@ export function GameOverModal({ score, onRestart }: GameOverModalProps) {
         justifyContent: 'center',
         zIndex: 100,
         animation: 'fadeIn 0.35s ease',
-        backdropFilter: isAesthetic ? 'blur(8px)' : undefined,
-        WebkitBackdropFilter: isAesthetic ? 'blur(8px)' : undefined,
+        backdropFilter: !isClassic ? 'blur(8px)' : undefined,
+        WebkitBackdropFilter: !isClassic ? 'blur(8px)' : undefined,
       }}
     >
       <p
@@ -33,8 +34,8 @@ export function GameOverModal({ score, onRestart }: GameOverModalProps) {
           fontWeight: 800,
           color: theme.modalText,
           letterSpacing: '-0.02em',
-          textShadow: isAesthetic
-            ? '0 0 28px rgba(255, 110, 196, 0.5)'
+          textShadow: isDark
+            ? `0 0 28px ${theme.accent}80`
             : 'none',
         }}
       >
@@ -51,15 +52,13 @@ export function GameOverModal({ score, onRestart }: GameOverModalProps) {
           background: theme.buttonBg,
           color: theme.buttonFg,
           border: 'none',
-          borderRadius: isAesthetic ? '12px' : '3px',
+          borderRadius: isClassic ? '3px' : '12px',
           padding: '12px 28px',
           fontSize: '18px',
           fontWeight: 800,
           letterSpacing: '0.02em',
           cursor: 'pointer',
-          boxShadow: isAesthetic
-            ? '0 8px 28px rgba(255, 110, 196, 0.45)'
-            : 'none',
+          boxShadow: isClassic ? 'none' : `0 8px 28px ${theme.accent}66`,
           transition: 'background 0.18s ease, transform 0.15s ease',
         }}
         onMouseEnter={e => { e.currentTarget.style.background = theme.buttonBgHover; }}

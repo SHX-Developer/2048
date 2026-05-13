@@ -168,14 +168,51 @@
   will-change: transform, opacity;
 }
 
-/* On the aesthetic theme, the halo gets a colored tint matching the tile,
-   for that satisfying neon-burst feel. */
+/* Per-theme merge halo tint — gives each style its own signature flash. */
 .tile-aesthetic.tile-merge::after {
   background: radial-gradient(
     circle at center,
     rgba(255, 110, 196, 0.55) 0%,
     rgba(120, 115, 245, 0.35) 35%,
     transparent 70%
+  );
+}
+
+.tile-ocean.tile-merge::after {
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 255, 255, 0.6) 0%,
+    rgba(56, 189, 248, 0.4) 35%,
+    transparent 70%
+  );
+}
+
+.tile-peach.tile-merge::after {
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 200, 180, 0.6) 0%,
+    rgba(255, 126, 182, 0.4) 35%,
+    transparent 70%
+  );
+}
+
+.tile-fire.tile-merge::after {
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 240, 154, 0.7) 0%,
+    rgba(255, 138, 31, 0.5) 30%,
+    rgba(200, 30, 0, 0.3) 55%,
+    transparent 75%
+  );
+}
+
+.tile-ice.tile-merge::after {
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 255, 255, 0.8) 0%,
+    rgba(168, 230, 255, 0.45) 35%,
+    rgba(90, 207, 241, 0.25) 60%,
+    transparent 75%
   );
 }
 

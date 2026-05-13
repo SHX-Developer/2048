@@ -17,7 +17,8 @@ export function MainMenu({ initialThemeId, initialGridSize, onStart }: MainMenuP
   const [gridSize, setGridSize]     = useState<GridSize>(initialGridSize);
   const selected = THEME_LIST.find(t => t.id === selectedId) ?? THEME_LIST[0];
 
-  const isAesthetic = selected.id === 'aesthetic';
+  // Themes with dark page backgrounds need light surfaces and vice versa.
+  const isDark = selected.id === 'aesthetic' || selected.id === 'fire';
 
   return (
     <div
@@ -71,8 +72,8 @@ export function MainMenu({ initialThemeId, initialGridSize, onStart }: MainMenuP
               color: selected.titleColor,
               lineHeight: 1,
               letterSpacing: '-0.02em',
-              textShadow: isAesthetic
-                ? '0 0 32px rgba(255, 110, 196, 0.4), 0 0 64px rgba(120, 115, 245, 0.3)'
+              textShadow: isDark
+                ? `0 0 32px ${selected.accent}66, 0 0 64px ${selected.accent}33`
                 : 'none',
               transition: 'color 0.35s ease, text-shadow 0.35s ease',
             }}
@@ -126,12 +127,12 @@ export function MainMenu({ initialThemeId, initialGridSize, onStart }: MainMenuP
               gap: '8px',
               padding: '4px',
               borderRadius: selected.id === 'classic' ? '4px' : '12px',
-              background: isAesthetic
+              background: isDark
                 ? 'rgba(255,255,255,0.06)'
-                : (selected.id === 'ocean'
-                    ? 'rgba(255,255,255,0.45)'
-                    : 'rgba(0,0,0,0.05)'),
-              boxShadow: isAesthetic
+                : (selected.id === 'classic'
+                    ? 'rgba(0,0,0,0.05)'
+                    : 'rgba(255,255,255,0.45)'),
+              boxShadow: isDark
                 ? 'inset 0 0 0 1px rgba(255,255,255,0.08)'
                 : 'none',
             }}
@@ -164,11 +165,9 @@ export function MainMenu({ initialThemeId, initialGridSize, onStart }: MainMenuP
             letterSpacing: '0.08em',
             textTransform: 'uppercase',
             cursor: 'pointer',
-            boxShadow: isAesthetic
-              ? '0 8px 28px rgba(255, 110, 196, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.12) inset'
-              : (selected.id === 'ocean'
-                  ? '0 8px 24px rgba(14, 116, 144, 0.3)'
-                  : '0 2px 6px rgba(0,0,0,0.15)'),
+            boxShadow: selected.id === 'classic'
+              ? '0 2px 6px rgba(0,0,0,0.15)'
+              : `0 8px 26px ${selected.accent}66, 0 0 0 1px rgba(255, 255, 255, 0.12) inset`,
             transition: 'transform 0.18s ease, box-shadow 0.25s ease, background 0.35s ease',
           }}
         >
@@ -220,10 +219,11 @@ interface ThemeCardProps {
 }
 
 function ThemeCard({ theme, active, onSelect }: ThemeCardProps) {
-  const previewValues = [2, 8, 64, 2048] as const;
-  const isAesthetic = theme.id === 'aesthetic';
-  const isClassic   = theme.id === 'classic';
-  const accent      = isAesthetic ? '#ff6ec4' : (theme.id === 'ocean' ? '#06b6d4' : '#8f7a66');
+  // Compact preview — 4 representative tiles (2, 32, 256, 2048)
+  // chosen so each end of the gradient spectrum is visible at a glance.
+  const previewValues = [2, 32, 256, 2048] as const;
+  const isClassic = theme.id === 'classic';
+  const accent    = theme.accent;
 
   return (
     <button
@@ -231,19 +231,17 @@ function ThemeCard({ theme, active, onSelect }: ThemeCardProps) {
       className="theme-card"
       style={{
         position: 'relative',
-        padding: '10px 8px 12px',
+        padding: '8px 6px 10px',
         background: theme.boardBg,
         border: 'none',
-        borderRadius: isClassic ? '6px' : '14px',
+        borderRadius: isClassic ? '6px' : '12px',
         cursor: 'pointer',
         textAlign: 'left',
         boxShadow: active
-          ? `0 0 0 2px ${accent}, 0 8px 24px ${accent}44`
-          : (isAesthetic
-              ? '0 4px 16px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(255,255,255,0.08)'
-              : (theme.id === 'ocean'
-                  ? '0 4px 14px rgba(14, 116, 144, 0.18), inset 0 0 0 1px rgba(255,255,255,0.5)'
-                  : '0 2px 6px rgba(0,0,0,0.12)')),
+          ? `0 0 0 2px ${accent}, 0 8px 22px ${accent}55`
+          : (isClassic
+              ? '0 2px 6px rgba(0,0,0,0.12)'
+              : '0 4px 14px rgba(0, 0, 0, 0.15), inset 0 0 0 1px rgba(255,255,255,0.12)'),
         transition: 'transform 0.18s ease, box-shadow 0.25s ease',
         transform: active ? 'translateY(-2px)' : 'translateY(0)',
         overflow: 'hidden',
@@ -251,7 +249,7 @@ function ThemeCard({ theme, active, onSelect }: ThemeCardProps) {
       }}
     >
       {/* Mini tile preview row */}
-      <div style={{ display: 'flex', gap: '3px', marginBottom: '8px' }}>
+      <div style={{ display: 'flex', gap: '2px', marginBottom: '6px' }}>
         {previewValues.map(v => {
           const style = theme.tiles[v] ?? theme.tileDefault;
           return (
@@ -261,28 +259,21 @@ function ThemeCard({ theme, active, onSelect }: ThemeCardProps) {
                 flex: 1,
                 aspectRatio: '1',
                 background: style.bg,
-                color: style.fg,
-                borderRadius: isClassic ? '3px' : '5px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: v >= 1000 ? '7px' : v >= 10 ? '9px' : '10px',
-                fontWeight: 800,
-                boxShadow: !isClassic && style.glow ? `0 0 8px ${style.glow}` : 'none',
+                borderRadius: isClassic ? '3px' : '4px',
+                boxShadow: !isClassic && style.glow ? `0 0 6px ${style.glow}` : 'none',
               }}
-            >
-              {v}
-            </div>
+            />
           );
         })}
       </div>
 
       <div
         style={{
-          fontSize: '13px',
-          fontWeight: 700,
+          fontSize: '12px',
+          fontWeight: 800,
           color: theme.titleColor,
           lineHeight: 1.1,
+          letterSpacing: '0.01em',
         }}
       >
         {theme.name}
@@ -293,19 +284,19 @@ function ThemeCard({ theme, active, onSelect }: ThemeCardProps) {
           aria-hidden
           style={{
             position: 'absolute',
-            top: 6,
-            right: 6,
-            width: 18,
-            height: 18,
+            top: 4,
+            right: 4,
+            width: 16,
+            height: 16,
             borderRadius: '50%',
             background: accent,
             color: '#fff',
-            fontSize: 11,
+            fontSize: 10,
             fontWeight: 800,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: `0 0 10px ${accent}aa`,
+            boxShadow: `0 0 8px ${accent}bb`,
           }}
         >
           ✓
@@ -339,11 +330,7 @@ function SizePill({ size, active, theme, onSelect }: SizePillProps) {
         fontWeight: 800,
         fontSize: '15px',
         letterSpacing: '0.02em',
-        boxShadow: active && theme.id === 'aesthetic'
-          ? '0 4px 14px rgba(255, 110, 196, 0.35)'
-          : (active && theme.id === 'ocean'
-              ? '0 4px 14px rgba(14, 116, 144, 0.25)'
-              : 'none'),
+        boxShadow: active && !isClassic ? `0 4px 14px ${theme.accent}55` : 'none',
         transition: 'background 0.2s ease, color 0.2s ease, transform 0.15s ease, box-shadow 0.25s ease',
         display: 'flex',
         flexDirection: 'column',

@@ -9,17 +9,19 @@ interface ScorePanelProps {
 
 function ScoreBox({ label, value }: { label: string; value: number }) {
   const theme = useTheme();
+  const isClassic = theme.id === 'classic';
+  const isDark    = theme.id === 'aesthetic' || theme.id === 'fire';
   return (
     <div
       style={{
         background: theme.scoreBoxBg,
-        borderRadius: theme.id === 'aesthetic' ? '10px' : '3px',
+        borderRadius: isClassic ? '3px' : '10px',
         padding: '6px 16px',
         textAlign: 'center',
         minWidth: '72px',
-        boxShadow: theme.id === 'aesthetic'
+        boxShadow: isDark
           ? 'inset 0 0 0 1px rgba(255,255,255,0.08)'
-          : 'none',
+          : (isClassic ? 'none' : 'inset 0 0 0 1px rgba(255,255,255,0.4)'),
         transition: 'background 0.35s ease',
       }}
     >
@@ -58,14 +60,15 @@ interface ActionButtonProps {
 
 function ActionButton({ label, onClick, variant = 'primary' }: ActionButtonProps) {
   const theme = useTheme();
-  const isAesthetic = theme.id === 'aesthetic';
+  const isClassic = theme.id === 'classic';
+  const isDark    = theme.id === 'aesthetic' || theme.id === 'fire';
 
   const baseBg = variant === 'primary'
     ? theme.buttonBg
-    : (isAesthetic ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)');
+    : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)');
   const hoverBg = variant === 'primary'
     ? theme.buttonBgHover
-    : (isAesthetic ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.1)');
+    : (isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.1)');
   const fg = variant === 'primary'
     ? theme.buttonFg
     : theme.textColor;
@@ -77,15 +80,15 @@ function ActionButton({ label, onClick, variant = 'primary' }: ActionButtonProps
         background: baseBg,
         color: fg,
         border: 'none',
-        borderRadius: isAesthetic ? '10px' : '3px',
+        borderRadius: isClassic ? '3px' : '10px',
         padding: '8px 16px',
         fontSize: '13px',
         fontWeight: 700,
         letterSpacing: '0.02em',
         cursor: 'pointer',
         whiteSpace: 'nowrap',
-        boxShadow: variant === 'primary' && isAesthetic
-          ? '0 4px 14px rgba(255, 110, 196, 0.35)'
+        boxShadow: variant === 'primary' && !isClassic
+          ? `0 4px 14px ${theme.accent}55`
           : 'none',
         transition: 'background 0.18s ease, transform 0.15s ease, box-shadow 0.25s ease',
       }}
@@ -101,7 +104,7 @@ function ActionButton({ label, onClick, variant = 'primary' }: ActionButtonProps
 
 export function ScorePanel({ score, best, onRestart, onMenu }: ScorePanelProps) {
   const theme = useTheme();
-  const isAesthetic = theme.id === 'aesthetic';
+  const isDark = theme.id === 'aesthetic' || theme.id === 'fire';
 
   return (
     <>
@@ -115,8 +118,8 @@ export function ScorePanel({ score, best, onRestart, onMenu }: ScorePanelProps) 
             color: theme.titleColor,
             lineHeight: 1,
             letterSpacing: '-0.02em',
-            textShadow: isAesthetic
-              ? '0 0 24px rgba(255, 110, 196, 0.35), 0 0 48px rgba(120, 115, 245, 0.25)'
+            textShadow: isDark
+              ? `0 0 24px ${theme.accent}66, 0 0 48px ${theme.accent}33`
               : 'none',
             transition: 'color 0.35s ease, text-shadow 0.35s ease',
           }}
